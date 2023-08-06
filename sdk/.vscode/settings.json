@@ -1,0 +1,15 @@
+{
+    "editor.tabSize": 4,
+    "workbench.colorTheme": "Visual Studio 2017 Light - C++",
+    "files.associations": {
+        "my_test_game_pad.h": "c",
+        "app_charge.h": "c",
+        "sdmmc.h": "c",
+        "lbuf.h": "c",
+        "pwm_led.h": "c"
+    },
+    "workbench.preferredHighContrastColorTheme": "Visual Studio 2017 Light - C++",
+    "editor.fontSize": 17,
+    "workbench.preferredHighContrastLightColorTheme": "Visual Studio 2017 Light - C++",
+    "workbench.preferredLightColorTheme": "Visual Studio 2017 Light - C++"
+}

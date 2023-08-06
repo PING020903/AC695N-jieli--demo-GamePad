@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_layout_file>
+	<FileVersion major="1" minor="0" />
+	<ActiveTarget name="Release" />
+	<File name="apps\dongle\dongle_key.c" open="0" top="0" tabpos="1" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="233" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="cpu\br23\audio_enc\audio_adc_demo.c" open="0" top="0" tabpos="18" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1627" topLine="204" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\device\cdc.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="12463" topLine="334" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\app_idle.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1084" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\my_put_test.c" open="1" top="1" tabpos="1" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="3703" topLine="93" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\user_cfg.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1620" topLine="24" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\host\hid.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="13501" topLine="428" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\os\FreeRTOS\task.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="822" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\app_dongle.c" open="0" top="0" tabpos="2" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="3666" topLine="131" />
+		</Cursor>
+	</File>
+	<File name="cpu\br23\adc_api.c" open="0" top="0" tabpos="16" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1882" topLine="71" />
+		</Cursor>
+	</File>
+	<File name="cpu\br23\audio_dec\audio_dec.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="17741" topLine="580" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\cpu\br23\asm\br23.h" open="0" top="0" tabpos="11" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="6239" topLine="210" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\device\usb\device\hid.h" open="0" top="0" tabpos="14" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="2264" topLine="62" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\board\br23\board_ac695x_demo_cfg.h" open="0" top="0" tabpos="1" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="550" topLine="13" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\debug.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="3504" topLine="88" />
+		</Cursor>
+	</File>
+	<File name="cpu\br23\charge.c" open="0" top="0" tabpos="10" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="2647" topLine="100" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\generic\gpio.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="268" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\host\aoa.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="463" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\host\usb_bulk_transfer.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="0" topLine="84" />
+		</Cursor>
+	</File>
+	<File name="apps\common\audio\decode\decode.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="90" topLine="2" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\device\uac_stream.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1214" topLine="54" />
+		</Cursor>
+	</File>
+	<File name="apps\common\key\irkey.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1155" topLine="1" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\timer.h" open="0" top="0" tabpos="7" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1663" topLine="54" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\board\br23\board_ac695x_demo.c" open="0" top="0" tabpos="12" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="10566" topLine="238" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\usb_common_def.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1235" topLine="12" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\device\usb_device.c" open="0" top="0" tabpos="8" split="0" active="1" splitpos="0" zoom_1="1" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="517" topLine="9" />
+		</Cursor>
+	</File>
+	<File name="cpu\br23\audio_enc\audio_enc.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="14992" topLine="523" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\generic\typedef.h" open="0" top="0" tabpos="8" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="3667" topLine="113" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\device\hid.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="1" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="12408" topLine="104" />
+		</Cursor>
+		<Folding>
+			<Collapse line="25" />
+			<Collapse line="198" />
+			<Collapse line="251" />
+			<Collapse line="285" />
+			<Collapse line="413" />
+			<Collapse line="416" />
+		</Folding>
+	</File>
+	<File name="apps\dongle\user_cfg.c" open="0" top="0" tabpos="5" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="3198" topLine="112" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\cpu\br23\asm\usb.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="6065" topLine="133" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\log_config\app_config.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="0" topLine="114" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\malloc.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="164" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\usb_std_class_def.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="862" topLine="12" />
+		</Cursor>
+	</File>
+	<File name="apps\common\key\key_driver.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="210" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\device\user_setup.c" open="0" top="0" tabpos="9" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="2255" topLine="104" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\device\uac1.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="42291" topLine="1126" />
+		</Cursor>
+	</File>
+	<File name="cpu\br23\audio_common\app_audio.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="17031" topLine="561" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\cpu\br23\asm\pwm_led.h" open="0" top="0" tabpos="6" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="6398" topLine="174" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\app_main.c" open="0" top="0" tabpos="1" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="2130" topLine="44" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\device\usb\usb_phy.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="88" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\app_core.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="576" topLine="34" />
+		</Cursor>
+	</File>
+	<File name="cpu\br23\audio_config.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="0" topLine="114" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\cpu\br23\asm\power\p33.h" open="0" top="0" tabpos="8" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="4911" topLine="112" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\cpu\br23\asm\gpio.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="7995" topLine="276" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\os\os_error.h" open="0" top="0" tabpos="13" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="355" topLine="3" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\device\usb\ch9.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="11101" topLine="308" />
+		</Cursor>
+	</File>
+	<File name="include_lib\media\media_develop\media\cpu\br23\asm\audio_adc.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="4459" topLine="130" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\os\os_api.h" open="0" top="0" tabpos="15" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1156" topLine="45" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\usb_config.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="6846" topLine="255" />
+		</Cursor>
+	</File>
+	<File name="cpu\br23\setup.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="2659" topLine="111" />
+		</Cursor>
+	</File>
+	<File name="apps\common\include\nandflash.h" open="0" top="0" tabpos="9" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="321" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\cpu\br23\asm\cpu.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="258" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\hci_cmds.c" open="0" top="0" tabpos="6" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="588" topLine="6" />
+		</Cursor>
+	</File>
+	<File name="include_lib\system\generic\printf.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="417" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\device\usb\scsi.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="0" topLine="93" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\btstack_demo.h" open="0" top="0" tabpos="7" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="202" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="cpu\br23\audio_enc\audio_enc_recoder.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="12847" topLine="378" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\device\usb\device\uac_audio.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="14254" topLine="430" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\btstack_demo.c" open="0" top="0" tabpos="6" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="210" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="cpu\br23\pwm_led.c" open="0" top="0" tabpos="5" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="7499" topLine="160" />
+		</Cursor>
+		<Folding>
+			<Collapse line="434" />
+			<Collapse line="452" />
+			<Collapse line="533" />
+			<Collapse line="1026" />
+		</Folding>
+	</File>
+	<File name="apps\common\usb\host\adb.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="0" topLine="96" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\device\task_pc.c" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="4529" topLine="247" />
+		</Cursor>
+	</File>
+	<File name="apps\common\usb\device\descriptor.c" open="0" top="0" tabpos="7" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="5305" topLine="122" />
+		</Cursor>
+	</File>
+	<File name="apps\dongle\my_put_test.h" open="0" top="0" tabpos="3" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="652" topLine="16" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\cpu\br23\asm\adc_api.h" open="0" top="0" tabpos="17" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="2412" topLine="62" />
+		</Cursor>
+	</File>
+	<File name="include_lib\driver\device\usb\device\usb_stack.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1316" topLine="30" />
+		</Cursor>
+	</File>
+</CodeBlocks_layout_file>
