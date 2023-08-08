@@ -6,7 +6,8 @@
         "app_charge.h": "c",
         "sdmmc.h": "c",
         "lbuf.h": "c",
-        "pwm_led.h": "c"
+        "pwm_led.h": "c",
+        "mcpwm.h": "c"
     },
     "workbench.preferredHighContrastColorTheme": "Visual Studio 2017 Light - C++",
     "editor.fontSize": 17,

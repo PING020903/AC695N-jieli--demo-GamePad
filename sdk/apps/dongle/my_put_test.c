@@ -20,6 +20,7 @@
 
 #include "generic/gpio.h"
 #include "generic/log.h"
+#include "asm/mcpwm.h"
 
 
 
@@ -28,10 +29,10 @@
 #define MAIN_TCC_TIMER (4)
 #define LED_TCC_TIMER (6)
 
-#define DEADBAND_X1 (500)       // internal deadband, left side of the axis
-#define DEADBAND_X2 (565)       // internal deadband, right side of the axis
+#define DEADBAND_X1 (490)       // internal deadband, minus side of the axis
+#define DEADBAND_X2 (575)       // internal deadband, plus side of the axis
 #define TRIGGER_INIT_VAL (30)   // trigger initial value
-#define TRIGGER_PRESS_VAL (71)  // more than the value, so press the trigger
+#define TRIGGER_PRESS_VAL (45)  // more than the value, so press the trigger
 
 
 extern usb_dev usbfd;                       //form task_pc.c
@@ -39,12 +40,16 @@ extern unsigned char trigger[2];            //form uac1.c
 extern int pwm_led_output_clk(u8 gpio, u8 prd, u8 duty);
 extern void my_pwm_led_on_display(u8 led_index, u16 led0_bright, u16 led1_bright);
 extern void my_PWM_bright_set(u16 led1_duty);
+extern void mcpwm_init(struct pwm_platform_data *arg);
+extern void mcpwm_set_duty(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch, u16 duty);
+extern void log_pwm_info(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch);
 
 volatile unsigned char the_io_val = 0;      //IO status
 volatile unsigned int tcc_count = 0;
 static int ret_id_timer;                    //timer ID
 static int ret_id_timer_led;
 static unsigned char data_send_to_host[20] = { 0x00 };  /* using the variant have to set zero , in the after assign the value */
+static unsigned char data_send_to_host_temp[20] = { 0x00 };
 
 static unsigned char count_all_func = 0;        // function start to end time
 static unsigned char count_all_func_1 = 0;
@@ -60,7 +65,7 @@ static volatile unsigned char b_key_val = 0;            // IO_PORTB_06
 static volatile unsigned char x_key_val = 0;            // IO_PORTB_09
 static volatile unsigned char y_key_val = 0;            // IO_PORTB_04
 static volatile unsigned char L_rocker_io_key = 0;      // IO_PORTA_07
-static volatile unsigned char R_rocker_io_key = 0;      // IO_PORTB_00
+static volatile unsigned char R_rocker_io_key = 0;      // IO_PORTB_02
 static volatile unsigned char L_1_io_key = 0;           // IO_PORTB_05
 static volatile unsigned char R_1_io_key = 0;           // IO_PORTB_07
 static volatile unsigned char start_io_key = 0;         // IO_PORTC_00
@@ -68,22 +73,24 @@ static volatile unsigned char back_io_key = 0;          // IO_PORTC_07
 static volatile unsigned char XboxHome_io_key = 0;      // IO_PORTC_01
 static volatile unsigned char io_key_status;            // merged io key
 
-static volatile  int my_rocker_ad_key_x = 0;            // ADC1, IO_PORTA_05
-static volatile  int my_rocker_ad_key_y = 0;            // ADC2, IO_PORTA_06
-static volatile  int R_rocker_ad_key_x = 0;             // ADC3, IO_PORTB_01
-static volatile  int R_rocker_ad_key_y = 0;             // ADC5, IO_PORTB_03
+static volatile int my_rocker_ad_key_x = 0;             // ADC1, IO_PORTA_05
+static volatile int my_rocker_ad_key_y = 0;             // ADC2, IO_PORTA_06
+static volatile int R_rocker_ad_key_x = 0;              // ADC3, IO_PORTB_01
+static volatile int R_rocker_ad_key_y = 0;              // ADC5, IO_PORTB_03
 
-static volatile unsigned char temp_rocker_value;
-
-static volatile  int L_trigger_ad_key = 0;              // ADC8, IO_PORTB_08
-static volatile  int R_trigger_ad_key = 0;              // ADC9, IO_PORTB_10
+static volatile int L_trigger_ad_key = 0;               // ADC8, IO_PORTB_08
+static volatile int R_trigger_ad_key = 0;               // ADC9, IO_PORTB_10
+static volatile int L_trigger_temp = 0;
+static volatile int R_trigger_temp = 0;
 
 static int io_count = 0;
+static int io_count_R = 0;
 
-//volatile struct sys_event my_key_event;             //will send the key_event
+static unsigned char motor_flag = 1;                    // 清除初始化的占空比值 Clear the initialised duty cycle value
 
 
-#if DISABLE
+#if 0
+volatile struct sys_event my_key_event;             //will send the key_event
 void my_send_ADkeyX_event(void)
 {
     my_key_event.type           = 0x0001;             //key_event 0x0001,
@@ -146,7 +153,7 @@ void my_read_key(void)
 
 #if 1
     L_rocker_io_key = ( gpio_read(IO_PORTA_07) ) ^ 0x01;
-    R_rocker_io_key = ( gpio_read(IO_PORTB_00) ) ^ 0x01;
+    R_rocker_io_key = ( gpio_read(IO_PORTB_02) ) ^ 0x01;
 
     L_1_io_key = ( gpio_read(IO_PORTB_05) ) ^ 0x01;
     R_1_io_key = ( gpio_read(IO_PORTB_07) ) ^ 0x01;
@@ -204,22 +211,42 @@ void read_trigger_value(void)
 #if 1   /* left */
     if(L_trigger_ad_key > TRIGGER_PRESS_VAL)
     {
-        data_send_to_host[4] = (L_trigger_ad_key - TRIGGER_INIT_VAL);       // left trigger, L2
-        if( (L_trigger_ad_key - TRIGGER_INIT_VAL) > 0xff )
+        int send_condition = L_trigger_temp - (L_trigger_ad_key - TRIGGER_INIT_VAL);// jitter judgement
+        if( send_condition > 4 || send_condition < (-4)){                         // eliminate jitter
+            data_send_to_host[4] = (L_trigger_ad_key - TRIGGER_INIT_VAL);       // left trigger, L2
+            L_trigger_temp = data_send_to_host[4];
+        }
+
+        if( (L_trigger_ad_key - TRIGGER_INIT_VAL) > 0xff ){
             data_send_to_host[4] = 0xff;
+            L_trigger_temp = 0xff;
+        }
     }
-    else
+    else{
         data_send_to_host[4] = 0x00;
+        L_trigger_temp = 0x00;
+    }
+
 #endif
 #if 1   /* right */
     if(R_trigger_ad_key > TRIGGER_PRESS_VAL)
     {
-        data_send_to_host[5] = (R_trigger_ad_key - TRIGGER_INIT_VAL);       // right trigger, R2
-        if( (R_trigger_ad_key - TRIGGER_INIT_VAL) > 0xff )
+        int send_condition = R_trigger_temp - (R_trigger_ad_key - TRIGGER_INIT_VAL);// jitter judgement
+        if( send_condition > 5 || send_condition < (-5)){                         // eliminate jitter
+            data_send_to_host[5] = (R_trigger_ad_key - TRIGGER_INIT_VAL);       // right trigger, R2
+            R_trigger_temp = data_send_to_host[5];
+        }
+
+        if( (R_trigger_ad_key - TRIGGER_INIT_VAL) > 0xff ){
             data_send_to_host[5] = 0xff;
+            R_trigger_temp = 0xff;
+        }
     }
-    else
+    else{
         data_send_to_host[5] = 0x00;
+        R_trigger_temp = 0x00;
+    }
+
 #endif
 #endif  /* trigger */
 }
@@ -241,13 +268,13 @@ void left_read_rocker(void)
     {
         if(DEADBAND_X2 <= my_rocker_ad_key_x)   // X+
         {
-            float temp_X_plus_f = (my_rocker_ad_key_x - DEADBAND_X2) / 3.58;     // external deadband, right side of the axis
+            float temp_X_plus_f = (my_rocker_ad_key_x - DEADBAND_X2) / 3.48;     // external deadband, right side of the axis
             L_X_plus = (unsigned char)temp_X_plus_f;
             L_X_minus = 0;
         }
         if(DEADBAND_X1 >= my_rocker_ad_key_x)   // X-
         {
-            float temp_X_minus_f = (DEADBAND_X1 - my_rocker_ad_key_x) / 3.8;    // external deadband, left side of the axis
+            float temp_X_minus_f = (DEADBAND_X1 - my_rocker_ad_key_x) / 3.7;    // external deadband, left side of the axis
             L_X_minus = 0xff - (unsigned char)temp_X_minus_f;
             L_X_plus = 0;
         }
@@ -256,13 +283,13 @@ void left_read_rocker(void)
     {
         if(DEADBAND_X2 <= my_rocker_ad_key_y)   // Y+
         {
-            float temp_Y_plus_f = (my_rocker_ad_key_y - DEADBAND_X2) / 3.3;     // external deadband, up side of the axis
+            float temp_Y_plus_f = (my_rocker_ad_key_y - DEADBAND_X2) / 3.2;     // external deadband, up side of the axis
             L_Y_plus = (unsigned char)temp_Y_plus_f;
             L_Y_minus = 0;
         }
         if(DEADBAND_X1 >= my_rocker_ad_key_y)   // Y-
         {
-            float temp_Y_minus_f = (DEADBAND_X1 - my_rocker_ad_key_y) / 3.9;    // external deadband, down side of the axis
+            float temp_Y_minus_f = (DEADBAND_X1 - my_rocker_ad_key_y) / 3.8;    // external deadband, down side of the axis
             L_Y_minus = 0xff - (unsigned char)temp_Y_minus_f;
             L_Y_plus = 0;
         }
@@ -351,13 +378,13 @@ void right_read_rocker(void)
     {
         if(DEADBAND_X2 <= R_rocker_ad_key_x)   // X+
         {
-            float temp_X_plus_f = (R_rocker_ad_key_x - DEADBAND_X2) / 3.58;     // external deadband, right side of the axis
+            float temp_X_plus_f = (R_rocker_ad_key_x - DEADBAND_X2) / 3.45;     // external deadband, right side of the axis
             R_X_plus = (unsigned char)temp_X_plus_f;
             R_X_minus = 0;
         }
         if(DEADBAND_X1 >= R_rocker_ad_key_x)   // X-
         {
-            float temp_X_minus_f = (DEADBAND_X1 - R_rocker_ad_key_x) / 3.8;    // external deadband, left side of the axis
+            float temp_X_minus_f = (DEADBAND_X1 - R_rocker_ad_key_x) / 3.7;    // external deadband, left side of the axis
             R_X_minus = 0xff - (unsigned char)temp_X_minus_f;
             R_X_plus = 0;
         }
@@ -366,13 +393,13 @@ void right_read_rocker(void)
     {
         if(DEADBAND_X2 <= R_rocker_ad_key_y)   // Y+
         {
-            float temp_Y_plus_f = (R_rocker_ad_key_y - DEADBAND_X2) / 3.3;     // external deadband, up side of the axis
+            float temp_Y_plus_f = (R_rocker_ad_key_y - DEADBAND_X2) / 3.2;     // external deadband, up side of the axis
             R_Y_plus = (unsigned char)temp_Y_plus_f;
             R_Y_minus = 0;
         }
         if(DEADBAND_X1 >= R_rocker_ad_key_y)   // Y-
         {
-            float temp_Y_minus_f = (DEADBAND_X1 - R_rocker_ad_key_y) / 3.9;    // external deadband, down side of the axis
+            float temp_Y_minus_f = (DEADBAND_X1 - R_rocker_ad_key_y) / 3.76;    // external deadband, down side of the axis
             R_Y_minus = 0xff - (unsigned char)temp_Y_minus_f;
             R_Y_plus = 0;
         }
@@ -451,22 +478,58 @@ void my_led_function(void)
         count_all_func_2 = 0;};
     tcc_count++;
 
-    /* PWM Motor */
-    if((data_send_to_host[4] == trigger[0]) || (data_send_to_host[5] == trigger[1]))
+    // 清除初始化的占空比值 Clear the initialised duty cycle value
+    while(motor_flag)
+    {
+        unsigned int register_temp = JL_USB->CON0;
+        register_temp = ((register_temp << 18) >> 31);      //13th bit, SOF_PND
+        if(register_temp)
+        {
+            mcpwm_set_duty(pwm_ch0, pwm_timer0, 0);
+            mcpwm_set_duty(pwm_ch1, pwm_timer1, 0);
+            motor_flag = 0;
+        }
+    }
+
+
+#if 1    /* PWM Motor */
+#if 1   /* left motor */
+    if(data_send_to_host[4] == trigger[0])
     {
         if(trigger[0] != 0)
             io_count = trigger[0];      // receive OUT packet form Xbox360input.exe
-        else if(trigger[1] != 0)
-            io_count = trigger[1];      // receive OUT packet form Xbox360input.exe
         else
             io_count = 0;
 
-        float temp = io_count * 2;
+        float temp = io_count * 39.22;
         io_count = temp;
-        if(io_count >= 500)
-        io_count = 500;
-        my_pwm_led_on_display(1, 0, io_count);
+        if(io_count >= 10000)
+            io_count = 10000;
+        mcpwm_set_duty(pwm_ch0, pwm_timer0, io_count);
+
+        //my_pwm_led_on_display(1, 0, io_count);
+        /* if( (tcc_count % (750 / MAIN_TCC_TIMER) ) == 0 )
+            printf("------ io_count >>> %d ------\n", io_count); */
     }
+#endif  /* left motor */
+
+#if 1   /* right motor */
+    if(data_send_to_host[5] == trigger[1])
+    {
+        if(trigger[1] != 0)
+            io_count_R = trigger[1];      // receive OUT packet form Xbox360input.exe
+        else
+            io_count_R = 0;
+
+        float temp = io_count_R * 39.22;
+        io_count_R = temp;
+        if(io_count_R >= 10000)
+            io_count_R = 10000;
+        //my_pwm_led_on_display(1, 0, io_count);
+        mcpwm_set_duty(pwm_ch1, pwm_timer1, io_count_R);
+    }
+#endif  /* right motor */
+#endif
 
     if( (tcc_count % (750 / MAIN_TCC_TIMER) ) == 0 )
     {
@@ -488,35 +551,34 @@ void my_led_function(void)
         count_all_func_3 = 0;} ;
 }
 
-void* my_timer_task(void* p_arg)
-{
-
-    int ret = os_taskq_post_type(MY_TASK_NAME, MAIN_TCC_TASK, 0, NULL);
-    if(ret != OS_NO_ERR)
-        log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
-
-    return &ret;
-}
-void* led_timer_task(void* p_arg)
-{
-    int ret = os_taskq_post_type(MY_TASK_NAME, BREATHE_LED_TASK, 0, NULL);
-    if(ret != OS_NO_ERR)
-        log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
-
-    return &ret;
-}
-
 static void send_data_to_host(void)
 {
+    unsigned char send_flag = 0;
     unsigned int register_temp = JL_USB->CON0;
     register_temp = ((register_temp << 18) >> 31);      //13th bit, SOF_PND
-    if(register_temp)
-        xbox360_tx_data(usbfd, data_send_to_host, 20);
+    for(int i = 0; i < 20; i++)
+    {
+        if(data_send_to_host_temp[i] == data_send_to_host[i])
+            send_flag++;
+        if(data_send_to_host_temp[i] != data_send_to_host[i])
+            send_flag--;
+        if(send_flag == 20)
+            return;
+    }
+    if(send_flag < 20)
+    {
+        if(register_temp)
+            xbox360_tx_data(usbfd, data_send_to_host, 20);
+
+        for(int i = 0; i < 20; i++)
+            data_send_to_host_temp[i] = data_send_to_host[i];
+    }
+    
 }
 
 void* my_task(void* p_arg)
 {
-    int msg[8];     // recive task queue
+    int msg[8];     // in the array, recive task queue 
     while(1)
     {
         /* receive task queue */
@@ -553,7 +615,9 @@ void my_button_init(void)
     printf("---------- %s ----------\n", __func__);
 
     /* set IO output */
-    gpio_set_direction(IO_PORTA_01, 0);         // ADC, PWM motor
+    //gpio_set_direction(IO_PORTA_01, 0);         // ADC, PWM motor
+    gpio_set_direction(IO_PORTB_00, 0);         // PWM, ch1, high
+    gpio_set_direction(IO_PORTA_00, 0);         // PWM, ch0, high
 
     /*set IO input*/
     gpio_set_direction(IO_PORTA_05, 1);         // ADC, rocker L_X
@@ -570,7 +634,7 @@ void my_button_init(void)
     gpio_set_direction(IO_PORTB_13, 1);         /* X */
     gpio_set_direction(IO_PORTB_15, 1);         /* Y */
 
-    gpio_set_direction(IO_PORTB_00, 1);         // IO,  rocker R_3
+    gpio_set_direction(IO_PORTB_02, 1);         // IO,  rocker R_3
     gpio_set_direction(IO_PORTB_01, 1);         // ADC, rocker R_X
     gpio_set_direction(IO_PORTB_03, 1);         // ADC, rocker R_Y
 
@@ -605,7 +669,7 @@ void my_button_init(void)
     gpio_set_die(IO_PORTB_04, 1);           /* B */
     gpio_set_die(IO_PORTB_06, 1);           /* Y */
 
-    gpio_set_die(IO_PORTB_00, 1);           // IO,  rocker R_3
+    gpio_set_die(IO_PORTB_02, 1);           // IO,  rocker R_3
     gpio_set_die(IO_PORTB_01, 0);           // ADC, rocker R_X
     gpio_set_die(IO_PORTB_03, 0);           // ADC, rocker R_Y
 
@@ -630,7 +694,7 @@ void my_button_init(void)
 
     gpio_set_pull_down(IO_PORTB_01, 0);
         gpio_set_pull_down(IO_PORTB_03, 0);
-            gpio_set_pull_down(IO_PORTB_00, 0);
+            gpio_set_pull_down(IO_PORTB_02, 0);
 
     gpio_set_pull_down(IO_PORTB_08, 0);
         gpio_set_pull_down(IO_PORTB_05, 0);
@@ -663,7 +727,7 @@ void my_button_init(void)
 
     gpio_set_pull_up(IO_PORTB_01, 0);
         gpio_set_pull_up(IO_PORTB_03, 0);
-            gpio_set_pull_up(IO_PORTB_00, 1);
+            gpio_set_pull_up(IO_PORTB_02, 1);
 
     gpio_set_pull_up(IO_PORTB_08, 0);
         gpio_set_pull_up(IO_PORTB_05, 1);
@@ -705,6 +769,7 @@ void my_button_init(void)
 
 void my_PWM_output_init(void)
 {
+#if 0 /* pwm led, only a commone channel output  */
     struct led_platform_data led_init;
     led_init.io_mode = LED_ONE_IO_MODE;
     led_init.io_cfg.one_io.pin = IO_PORTA_01;
@@ -719,8 +784,60 @@ void my_PWM_output_init(void)
         log_print(__LOG_ERROR, NULL, "this PWM_modle is not enable\r\n");
     else
         log_print(__LOG_INFO, NULL, "this PWM_modle enable\r\n");
+#endif
+    printf("---------- %s ----------\n", __func__);
+#if 1
+    struct pwm_platform_data pwm_motor_output_init = {0X00};
+#if 1
+    pwm_motor_output_init.complementary_en = 1;                     // 两个IO输出波形同步
+    pwm_motor_output_init.frequency = 10000;                        // 10KHz
+    pwm_motor_output_init.pwm_timer_num = pwm_timer0;               // 时间基准, PWM定时器0
+    pwm_motor_output_init.h_pin = IO_PORTA_00;                      // PWM output high IO, h_pin_output_ch_num 有效, 必须配置
+    pwm_motor_output_init.h_pin_output_ch_num = 0;
+    pwm_motor_output_init.l_pin = -1;                               // 不初始化 PWM output low, l_pin_output_ch_num 无效，可不配置
+    pwm_motor_output_init.duty = 2000;                                 // 占空比 0.01%
+    pwm_motor_output_init.pwm_aligned_mode = pwm_edge_aligned;      // 边沿对齐
+    pwm_motor_output_init.pwm_ch_num = pwm_ch0;                     // channel_0
+    printf("---------- >>> will init\n");
+    mcpwm_init(&pwm_motor_output_init);                             // PS: channel >= 3, not support output_channel
+    printf("---------- >>> mcpwm_init\n");
+#endif
+#if 1
+    pwm_motor_output_init.h_pin = IO_PORTB_00;
+    pwm_motor_output_init.h_pin_output_ch_num = 1;
+    pwm_motor_output_init.pwm_timer_num = pwm_timer1;               // 时间基准, PWM定时器1
+    pwm_motor_output_init.complementary_en = 1;                     // 两个IO输出波形同步
+    pwm_motor_output_init.frequency = 10000;                        // 10KHz
+    pwm_motor_output_init.l_pin = -1;                               // 不初始化 PWM output low
+    pwm_motor_output_init.duty = 2000;                                 // 占空比 0.01%
+    pwm_motor_output_init.pwm_aligned_mode = pwm_edge_aligned;      // 边沿对齐
+    pwm_motor_output_init.pwm_ch_num = pwm_ch1;                     // channel_1
 
-    //my_pwm_led_on_display(1, 0, 0);
+    printf("---------- >>> will init\n");
+    mcpwm_init(&pwm_motor_output_init);
+#endif
+
+#endif
+    log_pwm_info(pwm_ch0, pwm_timer0);
+    printf("---------- >>>>>>>>>> %s end <<<<<<<<<< ----------", __func__);
+}
+
+void* my_timer_task(void* p_arg)
+{
+
+    int ret = os_taskq_post_type(MY_TASK_NAME, MAIN_TCC_TASK, 0, NULL);
+    if(ret != OS_NO_ERR)
+        log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
+
+    return &ret;
+}
+void* led_timer_task(void* p_arg)
+{
+    int ret = os_taskq_post_type(MY_TASK_NAME, BREATHE_LED_TASK, 0, NULL);
+    if(ret != OS_NO_ERR)
+        log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
+
+    return &ret;
 }
 
 void my_task_init(void)
@@ -734,15 +851,16 @@ void my_task_init(void)
     data_send_to_host[1] = 0x14;
 #if 1
     /* create my task, remember do not set stack-size(stksize) too short. if send task queue ,do not set the queue-size(qsize) is zero */
-    err = os_task_create(my_task, NULL, 1, 8192, 128, MY_TASK_NAME);
+    err = os_task_create(my_task, NULL, 1, 128, 32, MY_TASK_NAME);
     log_print(__LOG_INFO, NULL, "create my task ! ! !    ret = %d\n", err);
 
     /* create user timer */
     ret_id_timer = sys_hi_timer_add(NULL, my_timer_task, MAIN_TCC_TIMER);
     log_print(__LOG_INFO, NULL, "Main timer task ID : %d\n", ret_id_timer);
 
-    /*同一定时器中最好不要连续发送两次任务消息, 发送任务消息的时间要错开, 否则会因为发送了任务消息而任务收到后尚未处理完成又收到任务导致队列溢出*/
-    /*定时器事件内未完成任务会导致任务队列溢出*/
+    /*同一定时器中最好不要连续发送两次任务消息, 发送任务消息的时间要错开, 否则会因为发送了任务消息, 而任务收到后尚未处理完成, 又收到任务导致队列溢出*/
+    /*定时器发送事件时间内未完成任务会导致任务队列溢出*/
+    /* Failure to complete a task within the timer send event time causes the task queue to overflow. */
     ret_id_timer_led = sys_hi_timer_add(NULL, led_timer_task, LED_TCC_TIMER);
     log_print(__LOG_INFO, NULL, "LED timer task ID : %d\n", ret_id_timer_led);
 #endif

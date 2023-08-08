@@ -50,7 +50,7 @@ typedef struct _pwm_ch_reg {
 
 /* 初始化要用的参数结构体 */
 struct pwm_platform_data {
-    u32 frequency;                               		///< 初始共同频率，CH0, CH, CH2, CH3, CH4
+    u32 frequency;                               		///< 初始共同频率，CH0, CH1, CH2, CH3, CH4
     pwm_ch_num_type pwm_ch_num;                         ///< 选择pwm通道
     pwm_timer_num_type pwm_timer_num;                   ///< 选择timer时基
     u16 duty;                                           ///< 初始占空比，0~10000 对应 0%~100% 。每个通道可以有不同的占空比。互补模式的占空比体现在高引脚的波形上。

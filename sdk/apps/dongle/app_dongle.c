@@ -191,9 +191,8 @@ int app_dongle_key_event_handler(struct sys_event *event)
     key_event = dongle_key_event_get(key);
 
     //if(key_event != KEY_NULL)
-    static unsigned char dddd = 0;
-    dddd ++;
-    if(dddd == 0)
+
+    if(0)
     {
 
 

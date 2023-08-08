@@ -21,8 +21,12 @@ static u8 pwm_fpin[6] = {IO_PORTA_14, IO_PORTA_15, IO_PORTA_08, IO_PORTC_00, IO_
 static u8 mctmr_clkin_pin[6] = {IO_PORTA_02, IO_PORTA_03, IO_PORTA_12, IO_PORTA_13, IO_PORTB_03, IO_PORTC_03};
 
 //output_channle
-static u8 CHx_CHx_PWM_H[3][3] = {CH0_CH0_PWM_H, CH0_CH1_PWM_H, CH0_CH2_PWM_H,  CH1_CH0_PWM_H, CH1_CH1_PWM_H, CH1_CH2_PWM_H,  CH2_CH0_PWM_H, CH2_CH1_PWM_H, CH2_CH2_PWM_H};
-static u8 CHx_CHx_PWM_L[3][3] = {CH0_CH0_PWM_L, CH0_CH1_PWM_L, CH0_CH2_PWM_L,  CH1_CH0_PWM_L, CH1_CH1_PWM_L, CH1_CH2_PWM_L,  CH2_CH0_PWM_L, CH2_CH1_PWM_L, CH2_CH2_PWM_L};
+static u8 CHx_CHx_PWM_H[3][3] = {   {CH0_CH0_PWM_H, CH0_CH1_PWM_H, CH0_CH2_PWM_H,   }, 
+                                    {CH1_CH0_PWM_H, CH1_CH1_PWM_H, CH1_CH2_PWM_H,   }, 
+                                    {CH2_CH0_PWM_H, CH2_CH1_PWM_H, CH2_CH2_PWM_H}   };
+static u8 CHx_CHx_PWM_L[3][3] = {   {CH0_CH0_PWM_L, CH0_CH1_PWM_L, CH0_CH2_PWM_L,   },
+                                    {CH1_CH0_PWM_L, CH1_CH1_PWM_L, CH1_CH2_PWM_L,   },
+                                    {CH2_CH0_PWM_L, CH2_CH1_PWM_L, CH2_CH2_PWM_L}   };
 
 
 PWM_TIMER_REG *get_pwm_timer_reg(pwm_timer_num_type index)
@@ -209,7 +213,7 @@ void mcpwm_ch_open_or_close(pwm_ch_num_type pwm_ch, u8 enable)
 }
 
 /*
- * @brief 关闭MCPWM模块
+ * @brief 打开MCPWM模块
  */
 void mcpwm_open(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch)
 {
@@ -315,8 +319,9 @@ _CH_L_SET:
     }
 
 _PWM_OPEN:
-    mcpwm_open(arg->pwm_ch_num, arg->pwm_timer_num); 	 //mcpwm enable
-    if (h_output_channel) {
+    
+    mcpwm_open(arg->pwm_ch_num, arg->pwm_timer_num); 	 //mcpwm enable 
+    if (h_output_channel) {         
         gpio_output_channle(arg->h_pin, CHx_CHx_PWM_H[arg->h_pin_output_ch_num][arg->pwm_ch_num]);
     }
     if (l_output_channel) {
