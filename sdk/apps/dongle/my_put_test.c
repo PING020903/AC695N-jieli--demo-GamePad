@@ -209,40 +209,49 @@ void read_trigger_value(void)
 
 #if 1   /* trigger */
 #if 1   /* left */
-    if(L_trigger_ad_key > TRIGGER_PRESS_VAL)
+    if(L_trigger_ad_key > TRIGGER_INIT_VAL)
     {
-        int send_condition = L_trigger_temp - (L_trigger_ad_key - TRIGGER_INIT_VAL);// jitter judgement
-        if( send_condition > 4 || send_condition < (-4)){                         // eliminate jitter
-            data_send_to_host[4] = (L_trigger_ad_key - TRIGGER_INIT_VAL);       // left trigger, L2
+        if( (L_trigger_ad_key - TRIGGER_INIT_VAL - TRIGGER_DEADBAND) < 0)
+            goto the_l;
+        float LT_temp = (L_trigger_ad_key - TRIGGER_INIT_VAL - TRIGGER_DEADBAND) * 1.2;
+        int send_condition = L_trigger_temp - LT_temp;                          // jitter judgement
+        if( send_condition > 3 || send_condition < (-5)){                       // eliminate jitter
+            data_send_to_host[4] = LT_temp;                                     // left trigger, L2
             L_trigger_temp = data_send_to_host[4];
         }
 
-        if( (L_trigger_ad_key - TRIGGER_INIT_VAL) > 0xff ){
+        if( LT_temp >= (float)0xff ){
             data_send_to_host[4] = 0xff;
             L_trigger_temp = 0xff;
         }
     }
     else{
+        the_l:
         data_send_to_host[4] = 0x00;
         L_trigger_temp = 0x00;
     }
 
 #endif
 #if 1   /* right */
-    if(R_trigger_ad_key > TRIGGER_PRESS_VAL)
+    if(R_trigger_ad_key > TRIGGER_INIT_VAL)
     {
-        int send_condition = R_trigger_temp - (R_trigger_ad_key - TRIGGER_INIT_VAL);// jitter judgement
-        if( send_condition > 5 || send_condition < (-5)){                         // eliminate jitter
-            data_send_to_host[5] = (R_trigger_ad_key - TRIGGER_INIT_VAL);       // right trigger, R2
+        if( (R_trigger_ad_key - TRIGGER_INIT_VAL - TRIGGER_DEADBAND) < 0)
+            goto the_r;
+        float RT_temp = (R_trigger_ad_key - TRIGGER_INIT_VAL - TRIGGER_DEADBAND) * 1.2;
+        //int send_condition = R_trigger_temp - (R_trigger_ad_key - TRIGGER_INIT_VAL - TRIGGER_DEADBAND);// jitter judgement
+        int send_condition = R_trigger_temp - RT_temp;                              // jitter judgement
+        if( send_condition > 3 || send_condition < (-5)){                           // eliminate jitter
+            data_send_to_host[5] = RT_temp;                                         // right trigger, R2
             R_trigger_temp = data_send_to_host[5];
         }
 
-        if( (R_trigger_ad_key - TRIGGER_INIT_VAL) > 0xff ){
+        if( RT_temp >= (float)0xff ){
             data_send_to_host[5] = 0xff;
             R_trigger_temp = 0xff;
         }
     }
     else{
+        the_r:
         data_send_to_host[5] = 0x00;
         R_trigger_temp = 0x00;
     }
