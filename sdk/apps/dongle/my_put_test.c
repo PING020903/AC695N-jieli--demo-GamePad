@@ -551,11 +551,15 @@ void my_led_function(void)
         count_all_func_3 = 0;} ;
 }
 
+#define HERE_HAVE_A_BUG 0   /* host will send 'reset' signal to slave in some times */
 static void send_data_to_host(void)
 {
+#if HERE_HAVE_A_BUG
     unsigned char send_flag = 0;
+#endif
     unsigned int register_temp = JL_USB->CON0;
     register_temp = ((register_temp << 18) >> 31);      //13th bit, SOF_PND
+#if HERE_HAVE_A_BUG
     for(int i = 0; i < 20; i++)
     {
         if(data_send_to_host_temp[i] == data_send_to_host[i])
@@ -567,13 +571,14 @@ static void send_data_to_host(void)
     }
     if(send_flag < 20)
     {
+#endif
         if(register_temp)
             xbox360_tx_data(usbfd, data_send_to_host, 20);
-
+#if HERE_HAVE_A_BUG
         for(int i = 0; i < 20; i++)
             data_send_to_host_temp[i] = data_send_to_host[i];
     }
-    
+#endif
 }
 
 void* my_task(void* p_arg)
