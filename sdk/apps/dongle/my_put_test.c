@@ -865,7 +865,7 @@ void my_task_init(void)
     data_send_to_host[1] = 0x14;
 #if 1
     /* create my task, remember do not set stack-size(stksize) too short. if send task queue ,do not set the queue-size(qsize) is zero */
-    err = os_task_create(my_task, NULL, 1, 128, 32, MY_TASK_NAME);
+    err = os_task_create(my_task, NULL, 1, 256, 32, MY_TASK_NAME);
     log_print(__LOG_INFO, NULL, "create my task ! ! !    ret = %d\n", err);
 
     /* create user timer */
