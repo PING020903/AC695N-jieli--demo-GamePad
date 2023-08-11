@@ -543,8 +543,8 @@ void my_led_function(void)
     if( (tcc_count % (750 / MAIN_TCC_TIMER) ) == 0 )
     {
         printf("USB : %X \n", JL_USB->CON0);            // get USB_CON0 register
-        the_io_val ^= 1;
-        gpio_direction_output(IO_PORTA_03, the_io_val );//invert the state
+        //the_io_val ^= 1;
+        //gpio_direction_output(IO_PORTA_03, the_io_val );//invert the state
         printf("---------- %s ----------\n", __func__);
 
         if( tcc_count == 12000 )
@@ -632,6 +632,11 @@ void my_button_init(void)
     //gpio_set_direction(IO_PORTA_01, 0);         // ADC, PWM motor
     gpio_set_direction(IO_PORTB_00, 0);         // PWM, ch1, high
     gpio_set_direction(IO_PORTA_00, 0);         // PWM, ch0, high
+
+    gpio_set_direction(IO_PORTA_02, 0);         /* LED1 */
+    gpio_set_direction(IO_PORTA_04, 0);         /* LED3 */
+    gpio_set_direction(IO_PORTA_01, 0);         /* LED0 */
+    gpio_set_direction(IO_PORTA_03, 0);         /* LED2 */
 
     /*set IO input*/
     gpio_set_direction(IO_PORTA_05, 1);         // ADC, rocker L_X
@@ -726,6 +731,11 @@ void my_button_init(void)
     gpio_set_pull_down(IO_PORTB_04, 0);         /* B */
     gpio_set_pull_down(IO_PORTB_06, 0);         /* Y */
 
+    gpio_set_pull_down(IO_PORTA_02, 0);         /* LED1 */
+    gpio_set_pull_down(IO_PORTA_04, 0);         /* LED3 */
+    gpio_set_pull_down(IO_PORTA_01, 0);         /* LED0 */
+    gpio_set_pull_down(IO_PORTA_03, 0);         /* LED2 */
+
     gpio_set_pull_down(IO_PORTC_00, 0);
     gpio_set_pull_down(IO_PORTC_01, 0);
     gpio_set_pull_down(IO_PORTC_03, 0);
@@ -758,6 +768,11 @@ void my_button_init(void)
     gpio_set_pull_up(IO_PORTB_11, 1);           /* A */
     gpio_set_pull_up(IO_PORTB_04, 1);           /* B */
     gpio_set_pull_up(IO_PORTB_06, 1);           /* Y */
+
+    gpio_set_pull_up(IO_PORTA_02, 1);          /* LED1 */
+    gpio_set_pull_up(IO_PORTA_04, 1);          /* LED3 */
+    gpio_set_pull_up(IO_PORTA_01, 1);          /* LED0 */
+    gpio_set_pull_up(IO_PORTA_03, 1);          /* LED2 */
 
     gpio_set_pull_up(IO_PORTC_00, 1);
     gpio_set_pull_up(IO_PORTC_01, 1);
@@ -858,7 +873,7 @@ void my_task_init(void)
 {
     printf("__________ %s __________\n", __func__);
     int err;
-    gpio_direction_output(IO_PORTA_03, 1);//set this IO output
+    //gpio_direction_output(IO_PORTA_03, 1);//set this IO output
 
     my_button_init();
     my_PWM_output_init();
