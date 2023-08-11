@@ -1131,8 +1131,15 @@ void mic_reset(struct usb_device_t *usb_device, u32 ift_num)
 /*(0x01|0x80)端点与方向
 **(0x02)端点与方向, 方向是0, 省略了*/
 #if ENABLE
+u8 config_flag = 0;
 static u8* xbox360_ep_in_dma;
 static u8* xbox360_ep_out_dma;
+static u8* xbox360_ep3_dma;
+static u8 fraud_temp[0x14] = {  0x00, 0x14, 0x00, 0x00,
+                                0x00, 0x00, 0x00, 0x00,
+                                0x00, 0xff, 0x00, 0x00,
+                                0x00, 0xff, 0x00, 0x00,
+                                0x00, 0x00, 0x00, 0x00,};
 u32 xbox360_register(const usb_dev usb_id)
 {
     printf("---------- %s ----------\n", __func__);
@@ -1140,9 +1147,14 @@ u32 xbox360_register(const usb_dev usb_id)
     xbox360_ep_in_dma = usb_alloc_ep_dmabuffer(usb_id, (0x01 | 0x80), MAXP_SIZE_HIDIN);
     if(xbox360_ep_in_dma == NULL)
         log_error(" 'xbox360_ep_in_dma' is NULL");
+
     xbox360_ep_out_dma = usb_alloc_ep_dmabuffer(usb_id, (HID_EP_OUT), MAXP_SIZE_HIDOUT);
     if(xbox360_ep_out_dma == NULL)
         log_error(" 'xbox360_ep_out_dma' is NULL");
+
+    xbox360_ep3_dma = usb_alloc_ep_dmabuffer(usb_id, 3, MAXP_SIZE_HIDOUT);
+    if(xbox360_ep3_dma == NULL)
+        log_error(" 'xbox360_ep3_dma' is NULL");
     return 0;
 }
 
@@ -1157,10 +1169,71 @@ static usb_interrupt hid_rx_data(struct usb_device_t *usb_device, u32 ep)
     //log_debug("---------- %s ----------", __func__);
     const usb_dev usb_id = usb_device2id(usb_device);
     u32 rx_len = usb_g_intr_read(usb_id, ep, NULL, 64, 0);
-/*     hid_tx_data(usb_device, xbox360_ep_out_dma, rx_len);
- */
-    trigger[0] = xbox360_ep_out_dma[3];
-    trigger[1] = xbox360_ep_out_dma[4];
+
+    if( (xbox360_ep_out_dma[0] == 0x01) &&
+        (xbox360_ep_out_dma[1] == 0x03) &&
+        (xbox360_ep_out_dma[2] >= 0x02 || xbox360_ep_out_dma[2] <= 0x05) &&
+        config_flag == 0){
+#if 0
+        const u8 temp_arr[] = {0x03, 0x03, 0x03};
+        const u8 temp_arr1[] = {0x08, 0x03, 0x00};
+        usb_g_intr_write(usb_id, 0x01, temp_arr, 3);
+        usb_g_intr_write(usb_id, 0x01, temp_arr1, 3);
+#endif
+        if(xbox360_ep_out_dma[2] == 0x02){      /* player1 */
+            gpio_direction_output(IO_PORTA_03, 1 );
+            gpio_direction_output(IO_PORTA_02, 0 );
+            gpio_direction_output(IO_PORTA_01, 0 );
+            gpio_direction_output(IO_PORTA_04, 0 );
+        }
+        if(xbox360_ep_out_dma[2] == 0x03){      /* player2 */
+            gpio_direction_output(IO_PORTA_03, 0 );
+            gpio_direction_output(IO_PORTA_02, 1 );
+            gpio_direction_output(IO_PORTA_01, 0 );
+            gpio_direction_output(IO_PORTA_04, 0 );
+        }
+        if(xbox360_ep_out_dma[2] == 0x04){      /* player3 */
+            gpio_direction_output(IO_PORTA_03, 0 );
+            gpio_direction_output(IO_PORTA_02, 0 );
+            gpio_direction_output(IO_PORTA_01, 1 );
+            gpio_direction_output(IO_PORTA_04, 0 );
+        }
+        if(xbox360_ep_out_dma[2] == 0x05){      /* player4 */
+            gpio_direction_output(IO_PORTA_03, 0 );
+            gpio_direction_output(IO_PORTA_02, 0 );
+            gpio_direction_output(IO_PORTA_01, 0 );
+            gpio_direction_output(IO_PORTA_04, 1 );
+        }
+        config_flag++;
+    }
+    if( (xbox360_ep_out_dma[0] == 0x01) &&
+        (xbox360_ep_out_dma[1] == 0x03) &&
+        (xbox360_ep_out_dma[2] >= 0x02 || xbox360_ep_out_dma[2] <= 0x05) &&
+        config_flag != 0){
+        hid_tx_data(usb_device, xbox360_ep_out_dma, rx_len);
+    }
+
+    //printf("---------------------------------%x, %x, %x\n", xbox360_ep2_out_dma[0], xbox360_ep2_out_dma[1], xbox360_ep2_out_dma[2]);
+    if( (xbox360_ep_out_dma[0] == 0x02) &&
+        (xbox360_ep_out_dma[1] == 0x08) &&
+        (xbox360_ep_out_dma[2] == 0x03)){
+        usb_g_intr_write(usb_id, 0x01, fraud_temp, 0x14);
+    }
+    if( (xbox360_ep_out_dma[0] == 0x00) &&
+        (xbox360_ep_out_dma[1] == 0x03) &&
+        (xbox360_ep_out_dma[2] == 0x00)){
+        u8 temp[0x03] = {0x05, 0x03, 0x00};
+        usb_g_intr_write(usb_id, 0x01, temp, 0x03);
+    }
+    if( (xbox360_ep_out_dma[0] == 0x00) &&
+        (xbox360_ep_out_dma[1] == 0x08) &&
+        (xbox360_ep_out_dma[2] == 0x00) ){
+        trigger[0] = xbox360_ep_out_dma[3];
+        trigger[1] = xbox360_ep_out_dma[4];
+    }
+}
+static usb_interrupt test_rx_data(struct usb_device_t *usb_device, u32 ep)
+{
 
 }
 static void xbox360_endpoint_init(struct usb_device_t *usb_device, u32 itf)
@@ -1175,6 +1248,13 @@ static void xbox360_endpoint_init(struct usb_device_t *usb_device, u32 itf)
     usb_g_ep_config(usb_id, (HID_EP_OUT), USB_ENDPOINT_XFER_INT, 1, xbox360_ep_out_dma, MAXP_SIZE_HIDOUT);
     usb_g_set_intr_hander(usb_id, (HID_EP_OUT), hid_rx_data);
     usb_enable_ep(usb_id, 2);
+
+/* 该端点主机检查后会在连接下发OUT包, 00 03 00
+    没有该端点就不会下发 */
+    memset(xbox360_ep3_dma, 0, MAXP_SIZE_HIDOUT);
+    usb_g_ep_config(usb_id, 3U, USB_ENDPOINT_XFER_INT, 1, xbox360_ep3_dma, MAXP_SIZE_HIDOUT);
+    usb_g_set_intr_hander(usb_id, 3U, test_rx_data);
+    usb_enable_ep(usb_id, 3U);
 }
 static void pc360_reset_hander(struct usb_device_t *usb_device, u32 itf)
 {
