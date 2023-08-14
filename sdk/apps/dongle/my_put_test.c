@@ -63,8 +63,6 @@ extern usb_dev usbfd;                       //form task_pc.c
 extern unsigned char trigger[2];            //form uac1.c
 extern unsigned char player_led;            //from uac1.c
 
-extern int pwm_led_output_clk(u8 gpio, u8 prd, u8 duty);
-extern void my_pwm_led_on_display(u8 led_index, u16 led0_bright, u16 led1_bright);
 extern void my_PWM_bright_set(u16 led1_duty);
 extern void mcpwm_init(struct pwm_platform_data *arg);
 extern void mcpwm_set_duty(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch, u16 duty);
