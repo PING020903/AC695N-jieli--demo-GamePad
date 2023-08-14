@@ -37,6 +37,8 @@
 
 extern usb_dev usbfd;                       //form task_pc.c
 extern unsigned char trigger[2];            //form uac1.c
+extern unsigned char player_led;            //from uac1.c
+
 extern int pwm_led_output_clk(u8 gpio, u8 prd, u8 duty);
 extern void my_pwm_led_on_display(u8 led_index, u16 led0_bright, u16 led1_bright);
 extern void my_PWM_bright_set(u16 led1_duty);
@@ -87,6 +89,8 @@ static int io_count = 0;
 static int io_count_R = 0;
 
 static unsigned char motor_flag = 1;                    // 清除初始化的占空比值 Clear the initialised duty cycle value
+static unsigned char player_IO_status = 1;              // 玩家led指示灯状态
+static volatile unsigned char player_flicker_time = 0;  // 玩家led指示灯闪烁时间
 
 
 #if 0
@@ -620,6 +624,50 @@ void* my_task(void* p_arg)
         default:
             break;
         }
+    }
+}
+
+void connect_flicker(void)
+{
+    if(player_flicker_time >= 8)
+        return;
+    switch (player_led)
+    {
+    case 1:{    /* player 1 */
+        if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
+            printf("------ %s ------, IO-->%d\n", __func__, player_IO_status);
+            player_IO_status ^= 1;
+            gpio_direction_output(IO_PORTA_03, (int)player_IO_status );
+            player_flicker_time++;
+        }
+    }break;
+
+    case 2:{
+        if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
+            printf("------ %s ------, IO-->%d\n", __func__, player_IO_status);
+            player_IO_status ^= 1;
+            gpio_direction_output(IO_PORTA_02, (int)player_IO_status );
+            player_flicker_time++;
+        }
+    }break;
+    case 3:{
+        if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
+            printf("------ %s ------, IO-->%d\n", __func__, player_IO_status);
+            player_IO_status ^= 1;
+            gpio_direction_output(IO_PORTA_01, (int)player_IO_status );
+            player_flicker_time++;
+        }
+    }break;
+    case 4:{
+        if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
+            printf("------ %s ------, IO-->%d\n", __func__, player_IO_status);
+            player_IO_status ^= 1;
+            gpio_direction_output(IO_PORTA_04, (int)player_IO_status );
+            player_flicker_time++;
+        }
+    }break;
+    default:
+        break;
     }
 }
 
