@@ -22,17 +22,41 @@
 #include "generic/log.h"
 #include "asm/mcpwm.h"
 
+/**************define-switch, 宏开关**************/
+#define READ_KEY            1
+#define MERGE_KEY           1
+#define MOVEMENTS_SEND      1
+
+#define TRIGGER             1
+#define LEFT_TRIGGER        1
+#define RIGHT_TRIGGER       1
+#define PWM_MOTOR           1
+#define LEFT_MOTOR          1
+#define RIGHT_MOTOR         1
+
+#define LEFT_ROCKER         1
+#define LEFT_ROCKER_BUFFER  1
+#define LEFT_ROCKER_X_AXIS  1
+#define LEFT_ROCKER_Y_AXIS  1
+
+#define RIGHT_ROCKER        1
+#define RIGHT_ROCKER_BUFFER 1
+#define RIGHT_ROCKER_X_AXIS 1
+#define RIGHT_ROCKER_Y_AXIS 1
+/***********************************************/
 
 
-#define BRIGHT (500)
+
+
 #define MY_TASK_NAME "thursday"
-#define MAIN_TCC_TIMER (4)
-#define LED_TCC_TIMER (6)
+#define BRIGHT              (500)
+#define MAIN_TCC_TIMER      (4)
+#define LED_TCC_TIMER       (8)
 
-#define DEADBAND_X1 (490)       // internal deadband, minus side of the axis
-#define DEADBAND_X2 (575)       // internal deadband, plus side of the axis
-#define TRIGGER_INIT_VAL (30)   // trigger initial value
-#define TRIGGER_PRESS_VAL (45)  // more than the value, so press the trigger
+#define DEADBAND_X1         (490)       // internal deadband, minus side of the axis
+#define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
+#define TRIGGER_INIT_VAL    (30)        // trigger initial value
+#define TRIGGER_PRESS_VAL   (45)        // more than the value, so press the trigger
 
 
 extern usb_dev usbfd;                       //form task_pc.c
@@ -155,7 +179,7 @@ void my_read_key(void)
     if((tcc_count % (750 / MAIN_TCC_TIMER) ) == 0)
         printf("---------- %s ----------\n", __func__);
 
-#if 1
+#if READ_KEY
     L_rocker_io_key = ( gpio_read(IO_PORTA_07) ) ^ 0x01;
     R_rocker_io_key = ( gpio_read(IO_PORTB_02) ) ^ 0x01;
 
@@ -177,7 +201,7 @@ void my_read_key(void)
     XboxHome_io_key = ( gpio_read(IO_PORTC_01) ) ^ 0x01;
 #endif
 
-#if 1   /* IO key */
+#if MERGE_KEY   /* IO key */
         io_key_status = 0x00;   /* using the variant have to set zero , in the after assign the value*/
         io_key_status = merge_value(io_key_status, my_key_val_3, 0);                            // ↑up
         io_key_status = merge_value(io_key_status, my_key_val_2, 1);                            // ↓dowm
@@ -211,51 +235,42 @@ void read_trigger_value(void)
     L_trigger_ad_key = adc_get_value(8);
     R_trigger_ad_key = adc_get_value(9);
 
-#if 1   /* trigger */
-#if 1   /* left */
-    if(L_trigger_ad_key > TRIGGER_INIT_VAL)
+#if TRIGGER   /* trigger */
+#if LEFT_TRIGGER   /* left */
+    if(L_trigger_ad_key > TRIGGER_PRESS_VAL)
     {
-        if( (L_trigger_ad_key - TRIGGER_INIT_VAL - TRIGGER_DEADBAND) < 0)
-            goto the_l;
-        float LT_temp = (L_trigger_ad_key - TRIGGER_INIT_VAL - TRIGGER_DEADBAND) * 1.2;
-        int send_condition = L_trigger_temp - LT_temp;                          // jitter judgement
-        if( send_condition > 3 || send_condition < (-5)){                       // eliminate jitter
-            data_send_to_host[4] = LT_temp;                                     // left trigger, L2
+        int send_condition = L_trigger_temp - (L_trigger_ad_key - TRIGGER_INIT_VAL);// jitter judgement
+        if( send_condition > 4 || send_condition < (-4)){                         // eliminate jitter
+            data_send_to_host[4] = (L_trigger_ad_key - TRIGGER_INIT_VAL);       // left trigger, L2
             L_trigger_temp = data_send_to_host[4];
         }
 
-        if( LT_temp >= (float)0xff ){
+        if( (L_trigger_ad_key - TRIGGER_INIT_VAL) > 0xff ){
             data_send_to_host[4] = 0xff;
             L_trigger_temp = 0xff;
         }
     }
     else{
-        the_l:
         data_send_to_host[4] = 0x00;
         L_trigger_temp = 0x00;
     }
 
 #endif
-#if 1   /* right */
-    if(R_trigger_ad_key > TRIGGER_INIT_VAL)
+#if RIGHT_TRIGGER   /* right */
+    if(R_trigger_ad_key > TRIGGER_PRESS_VAL)
     {
-        if( (R_trigger_ad_key - TRIGGER_INIT_VAL - TRIGGER_DEADBAND) < 0)
-            goto the_r;
-        float RT_temp = (R_trigger_ad_key - TRIGGER_INIT_VAL - TRIGGER_DEADBAND) * 1.2;
-        //int send_condition = R_trigger_temp - (R_trigger_ad_key - TRIGGER_INIT_VAL - TRIGGER_DEADBAND);// jitter judgement
-        int send_condition = R_trigger_temp - RT_temp;                              // jitter judgement
-        if( send_condition > 3 || send_condition < (-5)){                           // eliminate jitter
-            data_send_to_host[5] = RT_temp;                                         // right trigger, R2
+        int send_condition = R_trigger_temp - (R_trigger_ad_key - TRIGGER_INIT_VAL);// jitter judgement
+        if( send_condition > 5 || send_condition < (-5)){                         // eliminate jitter
+            data_send_to_host[5] = (R_trigger_ad_key - TRIGGER_INIT_VAL);       // right trigger, R2
             R_trigger_temp = data_send_to_host[5];
         }
 
-        if( RT_temp >= (float)0xff ){
+        if( (R_trigger_ad_key - TRIGGER_INIT_VAL) > 0xff ){
             data_send_to_host[5] = 0xff;
             R_trigger_temp = 0xff;
         }
     }
     else{
-        the_r:
         data_send_to_host[5] = 0x00;
         R_trigger_temp = 0x00;
     }
@@ -276,7 +291,7 @@ void left_read_rocker(void)
     my_rocker_ad_key_x = adc_get_value(1);  //ADC1
     my_rocker_ad_key_y = adc_get_value(2);  //ADC2
 
-#if 1   /* left rocker */
+#if LEFT_ROCKER   /* left rocker */
     if( (DEADBAND_X2 <= my_rocker_ad_key_x) || (DEADBAND_X1 >= my_rocker_ad_key_x) )
     {
         if(DEADBAND_X2 <= my_rocker_ad_key_x)   // X+
@@ -309,8 +324,8 @@ void left_read_rocker(void)
     }
 #endif  /* left rocker */
 
-#if 1   /* left rocker value buffer */
-#if 1   /* X axis */
+#if LEFT_ROCKER_BUFFER   /* left rocker value buffer */
+#if LEFT_ROCKER_X_AXIS   /* X axis */
         if(L_X_plus != 0 || L_X_minus != 0)
         {
             if(L_X_plus >= 127 && L_X_minus == 0)      // X+
@@ -345,7 +360,7 @@ void left_read_rocker(void)
                 data_send_to_host[9] = 0Xff;
         }
 
-#if 1   /* Y axis */
+#if LEFT_ROCKER_Y_AXIS   /* Y axis */
         if(L_Y_plus != 0 || L_Y_minus != 0)
         {
             if(L_Y_plus >= 127 && L_Y_minus == 0)
@@ -386,7 +401,8 @@ void right_read_rocker(void)
     R_rocker_ad_key_y = adc_get_value(6);   //ADC6
 
 
-#if 1   /* right rocker */
+#if RIGHT_ROCKER        1
+   /* right rocker */
     if( (DEADBAND_X2 <= R_rocker_ad_key_x) || (DEADBAND_X1 >= R_rocker_ad_key_x) )
     {
         if(DEADBAND_X2 <= R_rocker_ad_key_x)   // X+
@@ -419,8 +435,8 @@ void right_read_rocker(void)
     }
 #endif  /* right rocker */
 
-#if 1   /* right rocker value buffer */
-#if 1   /* X axis */
+#if RIGHT_ROCKER_BUFFER   /* right rocker value buffer */
+#if RIGHT_ROCKER_X_AXIS   /* X axis */
         if(R_X_plus != 0 || R_X_minus != 0)
         {
             if(R_X_plus >= 127 && R_X_minus == 0)      // X+
@@ -455,7 +471,7 @@ void right_read_rocker(void)
                 data_send_to_host[13] = 0Xff;
         }
 
-#if 1   /* Y axis */
+#if RIGHT_ROCKER_Y_AXIS   /* Y axis */
         if(R_Y_plus != 0 || R_Y_minus != 0)
         {
             if(R_Y_plus >= 127 && R_Y_minus == 0)
@@ -505,8 +521,8 @@ void my_led_function(void)
     }
 
 
-#if 1    /* PWM Motor */
-#if 1   /* left motor */
+#if PWM_MOTOR    /* PWM Motor */
+#if LEFT_MOTOR   /* left motor */
     if(data_send_to_host[4] == trigger[0])
     {
         if(trigger[0] != 0)
@@ -526,7 +542,7 @@ void my_led_function(void)
     }
 #endif  /* left motor */
 
-#if 1   /* right motor */
+#if RIGHT_MOTOR   /* right motor */
     if(data_send_to_host[5] == trigger[1])
     {
         if(trigger[1] != 0)
@@ -547,9 +563,10 @@ void my_led_function(void)
     if( (tcc_count % (750 / MAIN_TCC_TIMER) ) == 0 )
     {
         printf("USB : %X \n", JL_USB->CON0);            // get USB_CON0 register
-        //the_io_val ^= 1;
-        //gpio_direction_output(IO_PORTA_03, the_io_val );//invert the state
+        /* the_io_val ^= 1;
+        gpio_direction_output(IO_PORTA_03, the_io_val );//invert the state */
         printf("---------- %s ----------\n", __func__);
+        printf("watch dog stutas : %x\n", p33_rx_1byte(P3_WDT_CON));  // use this function read watch dog status from this address
 
         if( tcc_count == 12000 )
         {
@@ -564,15 +581,14 @@ void my_led_function(void)
         count_all_func_3 = 0;} ;
 }
 
-#define HERE_HAVE_A_BUG 0   /* host will send 'reset' signal to slave in some times */
 static void send_data_to_host(void)
 {
-#if HERE_HAVE_A_BUG
+#if MOVEMENTS_SEND
     unsigned char send_flag = 0;
 #endif
     unsigned int register_temp = JL_USB->CON0;
     register_temp = ((register_temp << 18) >> 31);      //13th bit, SOF_PND
-#if HERE_HAVE_A_BUG
+#if MOVEMENTS_SEND
     for(int i = 0; i < 20; i++)
     {
         if(data_send_to_host_temp[i] == data_send_to_host[i])
@@ -587,44 +603,11 @@ static void send_data_to_host(void)
 #endif
         if(register_temp)
             xbox360_tx_data(usbfd, data_send_to_host, 20);
-#if HERE_HAVE_A_BUG
+#if MOVEMENTS_SEND
         for(int i = 0; i < 20; i++)
             data_send_to_host_temp[i] = data_send_to_host[i];
     }
 #endif
-}
-
-void* my_task(void* p_arg)
-{
-    int msg[8];     // in the array, recive task queue 
-    while(1)
-    {
-        /* receive task queue */
-        int ret = os_taskq_pend(NULL, msg, ARRAY_SIZE(msg));
-        if (ret != OS_TASKQ)
-            continue;
-
-        switch(msg[0])
-        {
-            case MAIN_TCC_TASK:
-            {
-                my_read_key();
-                left_read_rocker();
-                right_read_rocker();
-                read_trigger_value();
-                send_data_to_host();
-            }
-            break;
-            case BREATHE_LED_TASK:
-            {
-                my_led_function();
-            }
-            break;
-
-        default:
-            break;
-        }
-    }
 }
 
 void connect_flicker(void)
@@ -668,6 +651,40 @@ void connect_flicker(void)
     }break;
     default:
         break;
+    }
+}
+
+void* my_task(void* p_arg)
+{
+    int msg[8];     // in the array, recive task queue
+    while(1)
+    {
+        /* receive task queue */
+        int ret = os_taskq_pend(NULL, msg, ARRAY_SIZE(msg));
+        if (ret != OS_TASKQ)
+            continue;
+
+        switch(msg[0])
+        {
+            case MAIN_TCC_TASK:
+            {
+                my_read_key();
+                left_read_rocker();
+                right_read_rocker();
+                read_trigger_value();
+                send_data_to_host();
+            }
+            break;
+            case BREATHE_LED_TASK:
+            {
+                my_led_function();
+                connect_flicker();
+            }
+            break;
+
+        default:
+            break;
+        }
     }
 }
 
