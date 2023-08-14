@@ -126,8 +126,15 @@ static volatile int R_trigger_temp = 0;
 #endif  /* right trigger */
 #endif  /* trigger */
 
+#if PWM_MOTOR
+#if LEFT_MOTOR
 static int io_count = 0;
+#endif  /* left motor */
+
+#if RIGHT_MOTOR
 static int io_count_R = 0;
+#endif  /* right motor */
+#endif  /* PWM motor */
 
 static volatile unsigned char io_key_status;            // merged io key
 static unsigned char motor_flag = 1;                    // 清除初始化的占空比值 Clear the initialised duty cycle value
