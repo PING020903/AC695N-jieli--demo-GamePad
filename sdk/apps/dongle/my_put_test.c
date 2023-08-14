@@ -401,7 +401,7 @@ void right_read_rocker(void)
     R_rocker_ad_key_y = adc_get_value(6);   //ADC6
 
 
-#if RIGHT_ROCKER        1
+#if RIGHT_ROCKER
    /* right rocker */
     if( (DEADBAND_X2 <= R_rocker_ad_key_x) || (DEADBAND_X1 >= R_rocker_ad_key_x) )
     {
