@@ -22,6 +22,7 @@
 #include "debug.h"
 
 volatile unsigned char trigger[2] = {0x00};
+unsigned char player_led;
 
 static const u8 sConfigDescriptor_interface_0[0x28] = 	// < USER Interface Descriptor >
 {
@@ -1185,24 +1186,28 @@ static usb_interrupt hid_rx_data(struct usb_device_t *usb_device, u32 ep)
             gpio_direction_output(IO_PORTA_02, 0 );
             gpio_direction_output(IO_PORTA_01, 0 );
             gpio_direction_output(IO_PORTA_04, 0 );
+	    player_led = 1;
         }
         if(xbox360_ep_out_dma[2] == 0x03){      /* player2 */
             gpio_direction_output(IO_PORTA_03, 0 );
             gpio_direction_output(IO_PORTA_02, 1 );
             gpio_direction_output(IO_PORTA_01, 0 );
             gpio_direction_output(IO_PORTA_04, 0 );
+	    player_led = 2;
         }
         if(xbox360_ep_out_dma[2] == 0x04){      /* player3 */
             gpio_direction_output(IO_PORTA_03, 0 );
             gpio_direction_output(IO_PORTA_02, 0 );
             gpio_direction_output(IO_PORTA_01, 1 );
             gpio_direction_output(IO_PORTA_04, 0 );
+	    player_led = 3;
         }
         if(xbox360_ep_out_dma[2] == 0x05){      /* player4 */
             gpio_direction_output(IO_PORTA_03, 0 );
             gpio_direction_output(IO_PORTA_02, 0 );
             gpio_direction_output(IO_PORTA_01, 0 );
             gpio_direction_output(IO_PORTA_04, 1 );
+	    player_led = 4;
         }
         config_flag++;
     }
