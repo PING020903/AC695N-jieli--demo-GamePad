@@ -82,36 +82,54 @@ static unsigned char count_all_func_1 = 0;
 static unsigned char count_all_func_2 = 0;
 static unsigned char count_all_func_3 = 0;
 
+#if READ_KEY
 static volatile unsigned char my_key_val_1 = 0;         // IO_PORTA_08
 static volatile unsigned char my_key_val_2 = 0;         // IO_PORTA_11
 static volatile unsigned char my_key_val_3 = 0;         // IO_PORTA_12
 static volatile unsigned char my_key_val_4 = 0;         // IO_PORTA_14
+
 static volatile unsigned char a_key_val = 0;            // IO_PORTB_11
 static volatile unsigned char b_key_val = 0;            // IO_PORTB_06
 static volatile unsigned char x_key_val = 0;            // IO_PORTB_09
 static volatile unsigned char y_key_val = 0;            // IO_PORTB_04
-static volatile unsigned char L_rocker_io_key = 0;      // IO_PORTA_07
+
 static volatile unsigned char R_rocker_io_key = 0;      // IO_PORTB_02
+static volatile unsigned char L_rocker_io_key = 0;      // IO_PORTA_07
+
 static volatile unsigned char L_1_io_key = 0;           // IO_PORTB_05
 static volatile unsigned char R_1_io_key = 0;           // IO_PORTB_07
+
 static volatile unsigned char start_io_key = 0;         // IO_PORTC_00
 static volatile unsigned char back_io_key = 0;          // IO_PORTC_07
 static volatile unsigned char XboxHome_io_key = 0;      // IO_PORTC_01
-static volatile unsigned char io_key_status;            // merged io key
+#endif
 
+#if LEFT_ROCKER
 static volatile int my_rocker_ad_key_x = 0;             // ADC1, IO_PORTA_05
 static volatile int my_rocker_ad_key_y = 0;             // ADC2, IO_PORTA_06
+#endif
+
+#if RIGHT_ROCKER
 static volatile int R_rocker_ad_key_x = 0;              // ADC3, IO_PORTB_01
 static volatile int R_rocker_ad_key_y = 0;              // ADC5, IO_PORTB_03
+#endif
 
+#if TRIGGER
+#if LEFT_TRIGGER
 static volatile int L_trigger_ad_key = 0;               // ADC8, IO_PORTB_08
-static volatile int R_trigger_ad_key = 0;               // ADC9, IO_PORTB_10
 static volatile int L_trigger_temp = 0;
+#endif  /* left trigger */
+
+#if RIGHT_TRIGGER
+static volatile int R_trigger_ad_key = 0;               // ADC9, IO_PORTB_10
 static volatile int R_trigger_temp = 0;
+#endif  /* right trigger */
+#endif  /* trigger */
 
 static int io_count = 0;
 static int io_count_R = 0;
 
+static volatile unsigned char io_key_status;            // merged io key
 static unsigned char motor_flag = 1;                    // 清除初始化的占空比值 Clear the initialised duty cycle value
 static unsigned char player_IO_status = 1;              // 玩家led指示灯状态
 static volatile unsigned char player_flicker_time = 0;  // 玩家led指示灯闪烁时间
