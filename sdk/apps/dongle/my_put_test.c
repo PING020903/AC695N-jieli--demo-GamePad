@@ -43,20 +43,36 @@
 #define RIGHT_ROCKER_BUFFER 1
 #define RIGHT_ROCKER_X_AXIS 1
 #define RIGHT_ROCKER_Y_AXIS 1
+
+#define FUNC_TIMESTAMP      1
 /***********************************************/
 
+#if FUNC_TIMESTAMP
 
+/*  以一种很粗糙的方式去判断函数的执行时间
+    建议一个一个函数启动该打印, 显示出时间戳, 否则可能会导致队列溢出
+func_name:      | my_read_key   | read_trigger_value| left_read_rocker  | right_read_rocker | my_led_function
+start_value:    |       2       |           4       |       6           |           8       |       0
+end_value:      |       3       |           5       |       7           |           9       |       1
+*/
+#define NMD                 (1)         // 该宏执行一次打印, 分别在刚进入函数与函数结束, 但不知为何一旦打印就队列溢出
+#define START_FUNC          (4)         // 起始函数值
+#define END_FUNC            (5)        // 结束函数值
+
+#endif
 
 
 #define MY_TASK_NAME "thursday"
 #define BRIGHT              (500)
 #define MAIN_TCC_TIMER      (4)
-#define LED_TCC_TIMER       (8)
+#define LED_TCC_TIMER       (6)
 
 #define DEADBAND_X1         (490)       // internal deadband, minus side of the axis
 #define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
 #define TRIGGER_INIT_VAL    (30)        // trigger initial value
 #define TRIGGER_PRESS_VAL   (45)        // more than the value, so press the trigger
+
+
 
 
 extern usb_dev usbfd;                       //form task_pc.c
@@ -75,10 +91,9 @@ static int ret_id_timer_led;
 static unsigned char data_send_to_host[20] = { 0x00 };  /* using the variant have to set zero , in the after assign the value */
 static unsigned char data_send_to_host_temp[20] = { 0x00 };
 
-static unsigned char count_all_func = 0;        // function start to end time
-static unsigned char count_all_func_1 = 0;
-static unsigned char count_all_func_2 = 0;
-static unsigned char count_all_func_3 = 0;
+static unsigned char count_all_func[10];        // function start to end time
+
+
 
 #if READ_KEY
 static volatile unsigned char my_key_val_1 = 0;         // IO_PORTA_08
@@ -126,11 +141,11 @@ static volatile int R_trigger_temp = 0;
 
 #if PWM_MOTOR
 #if LEFT_MOTOR
-static int io_count = 0;
+static int trigger_value_L = 0;
 #endif  /* left motor */
 
 #if RIGHT_MOTOR
-static int io_count_R = 0;
+static int trigger_value_R = 0;
 #endif  /* right motor */
 #endif  /* PWM motor */
 
@@ -195,12 +210,12 @@ static inline unsigned char merge_value(unsigned char all_key, unsigned char key
 
 void my_read_key(void)
 {
-
-    while (count_all_func){
-        printf("\n------------------------------- start %s -------------------------------\n", __func__);
-        count_all_func = 0;};
-    if((tcc_count % (750 / MAIN_TCC_TIMER) ) == 0)
-        printf("---------- %s ----------\n", __func__);
+#if FUNC_TIMESTAMP
+    while(count_all_func[2]){
+        count_all_func[2] = 0;
+        printf("------ %s -- start\n", __func__);
+    }
+#endif   
 
 #if READ_KEY
     L_rocker_io_key = ( gpio_read(IO_PORTA_07) ) ^ 0x01;
@@ -248,13 +263,26 @@ void my_read_key(void)
         data_send_to_host[3] = io_key_status;
 
 #endif  /* IO key */
-    while(count_all_func_1){
-        printf("\n------------------------------- end %s -------------------------------\n", __func__);
-        count_all_func_1 = 0;};
-}
 
+    if((tcc_count % (1000 / MAIN_TCC_TIMER) ) == 0)
+        printf("---------- %s ----------\n", __func__);
+
+#if FUNC_TIMESTAMP
+    while(count_all_func[3]){
+        count_all_func[3] = 0;
+        printf("------ %s -- end\n", __func__);
+    }
+#endif
+}
+    
 void read_trigger_value(void)
 {
+#if FUNC_TIMESTAMP
+    while(count_all_func[4]){
+        count_all_func[4] = 0;
+        printf("------ %s -- start\n", __func__);
+    }
+#endif
     L_trigger_ad_key = adc_get_value(8);
     R_trigger_ad_key = adc_get_value(9);
 
@@ -300,10 +328,24 @@ void read_trigger_value(void)
 
 #endif
 #endif  /* trigger */
+
+#if FUNC_TIMESTAMP
+    while(count_all_func[5]){
+        count_all_func[5] = 0;
+        printf("------ %s -- end\n", __func__);
+    }
+#endif
 }
 
 void left_read_rocker(void)
 {
+#if FUNC_TIMESTAMP
+    while(count_all_func[6]){
+        count_all_func[6] = 0;
+        printf("------ %s -- start\n", __func__);
+    }
+#endif
+
     /* Left */
     unsigned char L_X_plus = 0;      //X+
     unsigned char L_X_minus = 0;     //X-
@@ -410,10 +452,24 @@ void left_read_rocker(void)
         }
 #endif
 #endif  /* left rocker value buffer */
+
+#if FUNC_TIMESTAMP
+    while(count_all_func[7]){
+        count_all_func[7] = 0;
+        printf("------ %s -- end\n", __func__);
+    }
+#endif
 }
 
 void right_read_rocker(void)
 {
+#if FUNC_TIMESTAMP
+    while(count_all_func[8]){
+        count_all_func[8] = 0;
+        printf("------ %s -- start\n", __func__);
+    }
+#endif
+        
     /* Right */
     unsigned char R_X_plus = 0;      //X+
     unsigned char R_X_minus = 0;     //X-
@@ -521,15 +577,26 @@ void right_read_rocker(void)
         }
 #endif
 #endif  /* right rocker value buffer */
+
+#if FUNC_TIMESTAMP
+    while(count_all_func[9]){
+        count_all_func[9] = 0;
+        printf("------ %s -- end\n", __func__);
+    }
+#endif
 }
 
 void my_led_function(void)
 {
-    while (count_all_func_2){
-        printf("\n------------------------------- start %s -------------------------------\n", __func__);
-        count_all_func_2 = 0;};
-    tcc_count++;
-
+#if FUNC_TIMESTAMP
+    while (count_all_func[0])
+    {
+        count_all_func[0] = 0;
+        printf("------ %s -- start\n", __func__);
+    }
+#endif
+    
+    
     // 清除初始化的占空比值 Clear the initialised duty cycle value
     while(motor_flag)
     {
@@ -549,17 +616,17 @@ void my_led_function(void)
     if(data_send_to_host[4] == trigger[0])
     {
         if(trigger[0] != 0)
-            io_count = trigger[0];      // receive OUT packet form Xbox360input.exe
+            trigger_value_L = trigger[0];      // receive OUT packet form Xbox360input.exe
         else
-            io_count = 0;
+            trigger_value_L = 0;
 
-        float temp = io_count * 39.22;
-        io_count = temp;
-        if(io_count >= 10000)
-            io_count = 10000;
-        mcpwm_set_duty(pwm_ch0, pwm_timer0, io_count);
+        float temp = trigger_value_L * 39.22;
+        trigger_value_L = temp;
+        if(trigger_value_L >= 10000)
+            trigger_value_L = 10000;
+        mcpwm_set_duty(pwm_ch0, pwm_timer0, trigger_value_L);
 
-        //my_pwm_led_on_display(1, 0, io_count);
+        //my_pwm_led_on_display(1, 0, trigger_value_L);
     }
 #endif  /* left motor */
 
@@ -567,26 +634,26 @@ void my_led_function(void)
     if(data_send_to_host[5] == trigger[1])
     {
         if(trigger[1] != 0)
-            io_count_R = trigger[1];      // receive OUT packet form Xbox360input.exe
+            trigger_value_R = trigger[1];      // receive OUT packet form Xbox360input.exe
         else
-            io_count_R = 0;
+            trigger_value_R = 0;
 
-        float temp = io_count_R * 39.22;
-        io_count_R = temp;
-        if(io_count_R >= 10000)
-            io_count_R = 10000;
-        //my_pwm_led_on_display(1, 0, io_count);
-        mcpwm_set_duty(pwm_ch1, pwm_timer1, io_count_R);
+        float temp = trigger_value_R * 39.22;
+        trigger_value_R = temp;
+        if(trigger_value_R >= 10000)
+            trigger_value_R = 10000;
+        //my_pwm_led_on_display(1, 0, trigger_value_L);
+        mcpwm_set_duty(pwm_ch1, pwm_timer1, trigger_value_R);
     }
 #endif  /* right motor */
 #endif
 
-    if( (tcc_count % (750 / MAIN_TCC_TIMER) ) == 0 )
+    if( (tcc_count % (1000 / LED_TCC_TIMER) ) == 0 )
     {
         //printf("USB : %X \n", JL_USB->CON0);            // get USB_CON0 register
         /* the_io_val ^= 1;
         gpio_direction_output(IO_PORTA_03, the_io_val );//invert the state */
-        printf("---------- %s ----------\n", __func__);
+        //printf("---------- %s ----------\n", __func__);
         
         //printf("watch dog stutas : %x\n", p33_rx_1byte(P3_WDT_CON));  // use this function read watch dog status from this address
         if( tcc_count == 12000 )
@@ -597,9 +664,17 @@ void my_led_function(void)
             tcc_count = 0;
         }
     }
-    while(count_all_func_3){
-        printf("\n------------------------------- end %s -------------------------------\n", __func__);
-        count_all_func_3 = 0;} ;
+
+    if( (tcc_count % (1000 / LED_TCC_TIMER) ) == 0 )
+        printf("---------- %s ----------\n", __func__);
+
+#if FUNC_TIMESTAMP
+    while (count_all_func[1])
+    {
+        count_all_func[1] = 0;
+        printf("------ %s -- end \n", __func__);
+    }
+#endif   
 }
 
 static inline void send_data_to_host(void)
@@ -644,7 +719,6 @@ void connect_flicker(void)
             player_flicker_time++;
         }
     }break;
-
     case 2:{
         if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
             player_IO_status ^= 1;
@@ -695,6 +769,8 @@ void* my_task(void* p_arg)
             case BREATHE_LED_TASK:
             {
                 my_led_function();
+                if(player_flicker_time >= 8)
+                    break;
                 connect_flicker();
             }
             break;
@@ -940,6 +1016,7 @@ static inline void* my_timer_task(void* p_arg)
     if(ret != OS_NO_ERR)
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
 
+    tcc_count++;
     return &ret;
 }
 static inline void* led_timer_task(void* p_arg)
@@ -977,4 +1054,10 @@ void my_task_init(void)
 #endif
     /* printf pwm model info */
     //log_pwm_led_info();
+    for(int i = 0; i < 10; i++){
+        if(i >= START_FUNC && i < (END_FUNC + 1))
+            count_all_func[i] = NMD;
+        else
+            count_all_func[i] = 0;
+    }
 }
