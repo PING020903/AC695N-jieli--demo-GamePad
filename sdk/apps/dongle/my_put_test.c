@@ -63,7 +63,7 @@ extern usb_dev usbfd;                       //form task_pc.c
 extern unsigned char trigger[2];            //form uac1.c
 extern unsigned char player_led;            //from uac1.c
 
-extern void my_PWM_bright_set(u16 led1_duty);
+extern void my_pwm_led_on_display(u8 led_index, u16 led0_bright, u16 led1_bright);
 extern void mcpwm_init(struct pwm_platform_data *arg);
 extern void mcpwm_set_duty(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch, u16 duty);
 extern void log_pwm_info(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch);
@@ -177,13 +177,13 @@ void my_send_IOkey_event(void)
 #endif //disable send system event
 
 
-static unsigned int xbox360_tx_data(const usb_dev usb_id, const u8 *buffer, unsigned int len)
+static inline unsigned int xbox360_tx_data(const usb_dev usb_id, const u8 *buffer, unsigned int len)
 {
     return usb_g_intr_write(usb_id, 0x01, buffer, len);/* 0x01 is IN endpoint */
 }
 
 /* merge io key , 'key' value is one or zero only*/
-unsigned char merge_value(unsigned char all_key, unsigned char key, unsigned int bit)
+static inline unsigned char merge_value(unsigned char all_key, unsigned char key, unsigned int bit)
 {
     if(key != 1 && key != 0)
         return 0;
@@ -560,8 +560,6 @@ void my_led_function(void)
         mcpwm_set_duty(pwm_ch0, pwm_timer0, io_count);
 
         //my_pwm_led_on_display(1, 0, io_count);
-        /* if( (tcc_count % (750 / MAIN_TCC_TIMER) ) == 0 )
-            printf("------ io_count >>> %d ------\n", io_count); */
     }
 #endif  /* left motor */
 
@@ -589,13 +587,13 @@ void my_led_function(void)
         /* the_io_val ^= 1;
         gpio_direction_output(IO_PORTA_03, the_io_val );//invert the state */
         printf("---------- %s ----------\n", __func__);
-        printf("watch dog stutas : %x\n", p33_rx_1byte(P3_WDT_CON));  // use this function read watch dog status from this address
-
+        
+        //printf("watch dog stutas : %x\n", p33_rx_1byte(P3_WDT_CON));  // use this function read watch dog status from this address
         if( tcc_count == 12000 )
         {
             /* Cannot be re-entered for a short time */
             //pwm_led_breathe_display(1, 500, BRIGHT, BRIGHT, 0, 100, 0);
-
+            
             tcc_count = 0;
         }
     }
@@ -604,7 +602,7 @@ void my_led_function(void)
         count_all_func_3 = 0;} ;
 }
 
-static void send_data_to_host(void)
+static inline void send_data_to_host(void)
 {
 #if MOVEMENTS_SEND
     unsigned char send_flag = 0;
@@ -641,7 +639,6 @@ void connect_flicker(void)
     {
     case 1:{    /* player 1 */
         if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
-            printf("------ %s ------, IO-->%d\n", __func__, player_IO_status);
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_03, (int)player_IO_status );
             player_flicker_time++;
@@ -650,7 +647,6 @@ void connect_flicker(void)
 
     case 2:{
         if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
-            printf("------ %s ------, IO-->%d\n", __func__, player_IO_status);
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_02, (int)player_IO_status );
             player_flicker_time++;
@@ -658,7 +654,6 @@ void connect_flicker(void)
     }break;
     case 3:{
         if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
-            printf("------ %s ------, IO-->%d\n", __func__, player_IO_status);
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_01, (int)player_IO_status );
             player_flicker_time++;
@@ -666,7 +661,6 @@ void connect_flicker(void)
     }break;
     case 4:{
         if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
-            printf("------ %s ------, IO-->%d\n", __func__, player_IO_status);
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_04, (int)player_IO_status );
             player_flicker_time++;
