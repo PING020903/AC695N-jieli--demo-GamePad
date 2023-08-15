@@ -583,7 +583,7 @@ void my_led_function(void)
 
     if( (tcc_count % (750 / MAIN_TCC_TIMER) ) == 0 )
     {
-        printf("USB : %X \n", JL_USB->CON0);            // get USB_CON0 register
+        //printf("USB : %X \n", JL_USB->CON0);            // get USB_CON0 register
         /* the_io_val ^= 1;
         gpio_direction_output(IO_PORTA_03, the_io_val );//invert the state */
         printf("---------- %s ----------\n", __func__);
@@ -933,7 +933,7 @@ void my_PWM_output_init(void)
     printf("---------- >>>>>>>>>> %s end <<<<<<<<<< ----------", __func__);
 }
 
-void* my_timer_task(void* p_arg)
+static inline void* my_timer_task(void* p_arg)
 {
 
     int ret = os_taskq_post_type(MY_TASK_NAME, MAIN_TCC_TASK, 0, NULL);
@@ -942,7 +942,7 @@ void* my_timer_task(void* p_arg)
 
     return &ret;
 }
-void* led_timer_task(void* p_arg)
+static inline void* led_timer_task(void* p_arg)
 {
     int ret = os_taskq_post_type(MY_TASK_NAME, BREATHE_LED_TASK, 0, NULL);
     if(ret != OS_NO_ERR)
