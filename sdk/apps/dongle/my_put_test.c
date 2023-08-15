@@ -59,6 +59,7 @@ end_value:      |       3       |           5       |       7           |       
 #define START_FUNC          (4)         // 起始函数值
 #define END_FUNC            (5)        // 结束函数值
 
+static unsigned char count_all_func[10];        // function start to end time
 #endif
 
 
@@ -90,8 +91,6 @@ static int ret_id_timer;                    //timer ID
 static int ret_id_timer_led;
 static unsigned char data_send_to_host[20] = { 0x00 };  /* using the variant have to set zero , in the after assign the value */
 static unsigned char data_send_to_host_temp[20] = { 0x00 };
-
-static unsigned char count_all_func[10];        // function start to end time
 
 
 
@@ -1054,10 +1053,13 @@ void my_task_init(void)
 #endif
     /* printf pwm model info */
     //log_pwm_led_info();
+
+#if FUNC_TIMESTAMP
     for(int i = 0; i < 10; i++){
         if(i >= START_FUNC && i < (END_FUNC + 1))
             count_all_func[i] = NMD;
         else
             count_all_func[i] = 0;
     }
+#endif
 }
