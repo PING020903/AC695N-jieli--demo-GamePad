@@ -686,23 +686,14 @@ void my_led_function(void)
 #endif  /* right motor */
 #endif
 
-    //if( (tcc_count % (1000 / LED_TCC_TIMER) ) == 0 )
-    //{
+
         //printf("USB : %X \n", JL_USB->CON0);            // get USB_CON0 register
-        //the_io_val ^= 1;
-        //gpio_direction_output(IO_PORTA_03, the_io_val );//invert the state
-        //printf("---------- %s ----------\n", __func__);
         
         //printf("watch dog stutas : %x\n", p33_rx_1byte(P3_WDT_CON));  // use this function read watch dog status from this address
-        //if( tcc_count == 65534 )
-        //{ 
-            /* Cannot be re-entered for a short time */
-            //pwm_led_breathe_display(1, 500, BRIGHT, BRIGHT, 0, 100, 0);
-            
-        //    tcc_count = 0;
-        //}
-    //}
 
+        /* Cannot be re-entered for a short time */
+        //pwm_led_breathe_display(1, 500, BRIGHT, BRIGHT, 0, 100, 0);
+            
     if( (tcc_count % (1000 / LED_TCC_TIMER) ) == 0 )
         printf("---------- %s ----------", __func__);
 
