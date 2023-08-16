@@ -44,7 +44,7 @@
 #define RIGHT_ROCKER_X_AXIS 1
 #define RIGHT_ROCKER_Y_AXIS 1
 
-#define FUNC_TIMESTAMP      1
+#define FUNC_TIMESTAMP      0
 /***********************************************/
 
 #if FUNC_TIMESTAMP
@@ -91,6 +91,8 @@ static int ret_id_timer;                    //timer ID
 static int ret_id_timer_led;
 static unsigned char data_send_to_host[20] = { 0x00 };  /* using the variant have to set zero , in the after assign the value */
 static unsigned char data_send_to_host_temp[20] = { 0x00 };
+
+
 
 
 
@@ -264,7 +266,7 @@ void my_read_key(void)
 #endif  /* IO key */
 
     if((tcc_count % (1000 / MAIN_TCC_TIMER) ) == 0)
-        printf("---------- %s ----------\n", __func__);
+        printf("---------- %s ----------", __func__);
 
 #if FUNC_TIMESTAMP
     while(count_all_func[3]){
@@ -282,10 +284,12 @@ void read_trigger_value(void)
         printf("------ %s -- start\n", __func__);
     }
 #endif
+    
+
+#if TRIGGER   /* trigger */
     L_trigger_ad_key = adc_get_value(8);
     R_trigger_ad_key = adc_get_value(9);
 
-#if TRIGGER   /* trigger */
 #if LEFT_TRIGGER   /* left */
     if(L_trigger_ad_key > TRIGGER_PRESS_VAL)
     {
@@ -351,11 +355,14 @@ void left_read_rocker(void)
     unsigned char L_Y_plus = 0;      //Y+
     unsigned char L_Y_minus = 0;     //Y-
 
+
+#if LEFT_ROCKER  
+ 
     /* parametric is adc CHANNEL */
     my_rocker_ad_key_x = adc_get_value(1);  //ADC1
     my_rocker_ad_key_y = adc_get_value(2);  //ADC2
 
-#if LEFT_ROCKER   /* left rocker */
+    /* left rocker */
     if( (DEADBAND_X2 <= my_rocker_ad_key_x) || (DEADBAND_X1 >= my_rocker_ad_key_x) )
     {
         if(DEADBAND_X2 <= my_rocker_ad_key_x)   // X+
@@ -475,11 +482,13 @@ void right_read_rocker(void)
     unsigned char R_Y_plus = 0;      //Y+
     unsigned char R_Y_minus = 0;     //Y-
 
-    R_rocker_ad_key_x = adc_get_value(5);   //ADC5
-    R_rocker_ad_key_y = adc_get_value(6);   //ADC6
+    
 
 
 #if RIGHT_ROCKER
+    R_rocker_ad_key_x = adc_get_value(5);   //ADC5
+    R_rocker_ad_key_y = adc_get_value(6);   //ADC6
+
    /* right rocker */
     if( (DEADBAND_X2 <= R_rocker_ad_key_x) || (DEADBAND_X1 >= R_rocker_ad_key_x) )
     {
@@ -665,7 +674,7 @@ void my_led_function(void)
     }
 
     if( (tcc_count % (1000 / LED_TCC_TIMER) ) == 0 )
-        printf("---------- %s ----------\n", __func__);
+        printf("---------- %s ----------", __func__);
 
 #if FUNC_TIMESTAMP
     while (count_all_func[1])
