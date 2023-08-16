@@ -44,7 +44,7 @@
 #define RIGHT_ROCKER_X_AXIS 1
 #define RIGHT_ROCKER_Y_AXIS 1
 
-#define FUNC_TIMESTAMP      1
+#define FUNC_TIMESTAMP      0
 /***********************************************/
 
 #if FUNC_TIMESTAMP
