@@ -44,7 +44,7 @@
 #define RIGHT_ROCKER_X_AXIS 1
 #define RIGHT_ROCKER_Y_AXIS 1
 
-#define FUNC_TIMESTAMP      0
+#define FUNC_TIMESTAMP      1
 /***********************************************/
 
 #if FUNC_TIMESTAMP
@@ -56,8 +56,8 @@ start_value:    |       2       |           4       |       6           |       
 end_value:      |       3       |           5       |       7           |           9       |       1
 */
 #define NMD                 (1)         // 该宏执行一次打印, 分别在刚进入函数与函数结束, 但不知为何一旦打印就队列溢出
-#define START_FUNC          (4)         // 起始函数值
-#define END_FUNC            (5)        // 结束函数值
+#define START_FUNC          (0)         // 起始函数值
+#define END_FUNC            (0)        // 结束函数值
 
 static unsigned char count_all_func[10];        // function start to end time
 #endif
@@ -66,7 +66,7 @@ static unsigned char count_all_func[10];        // function start to end time
 #define MY_TASK_NAME "thursday"
 #define BRIGHT              (500)
 #define MAIN_TCC_TIMER      (4)
-#define LED_TCC_TIMER       (6)
+#define LED_TCC_TIMER       (8)
 
 #define DEADBAND_X1         (490)       // internal deadband, minus side of the axis
 #define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
@@ -87,6 +87,7 @@ extern void log_pwm_info(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch);
 
 volatile unsigned char the_io_val = 0;      //IO status
 volatile unsigned int tcc_count = 0;
+volatile unsigned int tcc_conut_led = 0;
 static int ret_id_timer;                    //timer ID
 static int ret_id_timer_led;
 static unsigned char data_send_to_host[20] = { 0x00 };  /* using the variant have to set zero , in the after assign the value */
@@ -153,7 +154,7 @@ static int trigger_value_R = 0;
 static volatile unsigned char io_key_status;            // merged io key
 static unsigned char motor_flag = 1;                    // 清除初始化的占空比值 Clear the initialised duty cycle value
 static unsigned char player_IO_status = 1;              // 玩家led指示灯状态
-static volatile unsigned char player_flicker_time = 0;  // 玩家led指示灯闪烁时间
+volatile unsigned char player_flicker_time = 0;         // 玩家led指示灯闪烁时间
 
 
 #if 0
@@ -207,6 +208,35 @@ static inline unsigned char merge_value(unsigned char all_key, unsigned char key
         return all_key |= (1 << bit);
     if(key == 0)
         return all_key &= ~(1 << bit);
+}
+
+static inline void send_data_to_host(void)
+{
+#if MOVEMENTS_SEND
+    unsigned char send_flag = 0;
+#endif
+    unsigned int register_temp = JL_USB->CON0;
+    register_temp = ((register_temp << 18) >> 31);      //13th bit, SOF_PND
+#if MOVEMENTS_SEND
+    for(int i = 0; i < 20; i++)
+    {
+        if(data_send_to_host_temp[i] == data_send_to_host[i])
+            send_flag++;
+        if(data_send_to_host_temp[i] != data_send_to_host[i])
+            send_flag--;
+        if(send_flag == 20)
+            return;
+    }
+    if(send_flag < 20)
+    {
+#endif
+        if(register_temp)
+            xbox360_tx_data(usbfd, data_send_to_host, 20);
+#if MOVEMENTS_SEND
+        for(int i = 0; i < 20; i++)
+            data_send_to_host_temp[i] = data_send_to_host[i];
+    }
+#endif
 }
 
 void my_read_key(void)
@@ -357,7 +387,7 @@ void left_read_rocker(void)
 
 
 #if LEFT_ROCKER  
- 
+
     /* parametric is adc CHANNEL */
     my_rocker_ad_key_x = adc_get_value(1);  //ADC1
     my_rocker_ad_key_y = adc_get_value(2);  //ADC2
@@ -656,22 +686,22 @@ void my_led_function(void)
 #endif  /* right motor */
 #endif
 
-    if( (tcc_count % (1000 / LED_TCC_TIMER) ) == 0 )
-    {
+    //if( (tcc_count % (1000 / LED_TCC_TIMER) ) == 0 )
+    //{
         //printf("USB : %X \n", JL_USB->CON0);            // get USB_CON0 register
-        /* the_io_val ^= 1;
-        gpio_direction_output(IO_PORTA_03, the_io_val );//invert the state */
+        //the_io_val ^= 1;
+        //gpio_direction_output(IO_PORTA_03, the_io_val );//invert the state
         //printf("---------- %s ----------\n", __func__);
         
         //printf("watch dog stutas : %x\n", p33_rx_1byte(P3_WDT_CON));  // use this function read watch dog status from this address
-        if( tcc_count == 12000 )
-        {
+        //if( tcc_count == 65534 )
+        //{ 
             /* Cannot be re-entered for a short time */
             //pwm_led_breathe_display(1, 500, BRIGHT, BRIGHT, 0, 100, 0);
             
-            tcc_count = 0;
-        }
-    }
+        //    tcc_count = 0;
+        //}
+    //}
 
     if( (tcc_count % (1000 / LED_TCC_TIMER) ) == 0 )
         printf("---------- %s ----------", __func__);
@@ -685,71 +715,42 @@ void my_led_function(void)
 #endif   
 }
 
-static inline void send_data_to_host(void)
-{
-#if MOVEMENTS_SEND
-    unsigned char send_flag = 0;
-#endif
-    unsigned int register_temp = JL_USB->CON0;
-    register_temp = ((register_temp << 18) >> 31);      //13th bit, SOF_PND
-#if MOVEMENTS_SEND
-    for(int i = 0; i < 20; i++)
-    {
-        if(data_send_to_host_temp[i] == data_send_to_host[i])
-            send_flag++;
-        if(data_send_to_host_temp[i] != data_send_to_host[i])
-            send_flag--;
-        if(send_flag == 20)
-            return;
-    }
-    if(send_flag < 20)
-    {
-#endif
-        if(register_temp)
-            xbox360_tx_data(usbfd, data_send_to_host, 20);
-#if MOVEMENTS_SEND
-        for(int i = 0; i < 20; i++)
-            data_send_to_host_temp[i] = data_send_to_host[i];
-    }
-#endif
-}
-
 void connect_flicker(void)
 {
-    if(player_flicker_time >= 8)
+    if(player_flicker_time == 1 && player_IO_status == 1)
         return;
     switch (player_led)
     {
-    case 1:{    /* player 1 */
-        if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
+    case 1:{    /* player 1 */ 
+        if( (tcc_conut_led % (240 / LED_TCC_TIMER) ) == 0 ){
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_03, (int)player_IO_status );
-            player_flicker_time++;
+            printf("____---- %s ----____\n", __func__);
         }
     }break;
     case 2:{
-        if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
+        if( (tcc_conut_led % (240 / LED_TCC_TIMER) ) == 0 ){
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_02, (int)player_IO_status );
-            player_flicker_time++;
         }
     }break;
     case 3:{
-        if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
+        if( (tcc_conut_led % (240 / LED_TCC_TIMER) ) == 0 ){
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_01, (int)player_IO_status );
-            player_flicker_time++;
         }
     }break;
     case 4:{
-        if( (tcc_count % (240 / MAIN_TCC_TIMER) ) == 0 ){
+        if( (tcc_conut_led % (240 / LED_TCC_TIMER) ) == 0 ){
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_04, (int)player_IO_status );
-            player_flicker_time++;
         }
     }break;
-    default:
-        break;
+    default:{
+        if( (tcc_conut_led % (240 / LED_TCC_TIMER) ) == 0 ){
+            printf("____---- %s ----default____\n", __func__);
+        }
+    }break;
     }
 }
 
@@ -772,12 +773,13 @@ void* my_task(void* p_arg)
                 right_read_rocker();
                 read_trigger_value();
                 send_data_to_host();
+                
             }
             break;
             case BREATHE_LED_TASK:
             {
                 my_led_function();
-                if(player_flicker_time >= 8)
+                if(player_flicker_time == 1 && player_IO_status == 1)
                     break;
                 connect_flicker();
             }
@@ -1019,7 +1021,8 @@ void my_PWM_output_init(void)
 
 static inline void* my_timer_task(void* p_arg)
 {
-
+    if( tcc_count == 65534 )
+        tcc_count = 0;
     int ret = os_taskq_post_type(MY_TASK_NAME, MAIN_TCC_TASK, 0, NULL);
     if(ret != OS_NO_ERR)
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
@@ -1029,10 +1032,13 @@ static inline void* my_timer_task(void* p_arg)
 }
 static inline void* led_timer_task(void* p_arg)
 {
+    if( tcc_conut_led == 65534 )
+        tcc_conut_led = 0;
     int ret = os_taskq_post_type(MY_TASK_NAME, BREATHE_LED_TASK, 0, NULL);
     if(ret != OS_NO_ERR)
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
 
+    tcc_conut_led++;
     return &ret;
 }
 
