@@ -44,7 +44,12 @@
 #define RIGHT_ROCKER_X_AXIS 1
 #define RIGHT_ROCKER_Y_AXIS 1
 
+#define SUCCESSIVE_PRESS    1
+#define RECORS_MOVEMENT     1
+
 #define FUNC_TIMESTAMP      0
+
+#define MY_PRINTF           0
 /***********************************************/
 
 #if FUNC_TIMESTAMP
@@ -64,9 +69,9 @@ static unsigned char count_all_func[10];        // function start to end time
 
 
 #define MY_TASK_NAME "thursday"
-#define BRIGHT              (500)
 #define MAIN_TCC_TIMER      (4)
 #define LED_TCC_TIMER       (8)
+#define SPECIAL_FUNC_TCC    (6)
 
 #define DEADBAND_X1         (490)       // internal deadband, minus side of the axis
 #define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
@@ -85,11 +90,14 @@ extern void mcpwm_init(struct pwm_platform_data *arg);
 extern void mcpwm_set_duty(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch, u16 duty);
 extern void log_pwm_info(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch);
 
-volatile unsigned char the_io_val = 0;      //IO status
-volatile unsigned int tcc_count = 0;
-volatile unsigned int tcc_conut_led = 0;
+volatile unsigned int tcc_count             = 0;
+volatile unsigned int tcc_conut_led         = 0;
+volatile unsigned int tcc_connt_SpecialFunc = 0;
+
 static int ret_id_timer;                    //timer ID
 static int ret_id_timer_led;
+static int ret_id_timer_SpecialFunctions;
+
 static unsigned char data_send_to_host[20] = { 0x00 };  /* using the variant have to set zero , in the after assign the value */
 static unsigned char data_send_to_host_temp[20] = { 0x00 };
 
@@ -116,7 +124,7 @@ static volatile unsigned char R_1_io_key = 0;           // IO_PORTB_07
 
 static volatile unsigned char start_io_key = 0;         // IO_PORTC_00
 static volatile unsigned char back_io_key = 0;          // IO_PORTC_07
-static volatile unsigned char XboxHome_io_key = 0;      // IO_PORTC_01
+static volatile unsigned char XboxBar_io_key = 0;      // IO_PORTC_01
 #endif
 
 #if LEFT_ROCKER
@@ -150,6 +158,17 @@ static int trigger_value_L = 0;
 static int trigger_value_R = 0;
 #endif  /* right motor */
 #endif  /* PWM motor */
+
+#if SUCCESSIVE_PRESS
+#define SUCCESSIVE_TCC_TIMER                (500)
+#define SUCCESSIVE_OF_CYCLICALITY(a)        (250U / (unsigned int)a)
+#define SUCCESSIVE_OF_HALF_CYCLICALITY(a)   ((250U / (unsigned int)a) / 2)     // 1000ms / x(Hz) = CYCLICALITY_TIMES, 该半周期值是近似值
+static volatile unsigned char successive_press_key = 0;
+static unsigned char successive_press_flag = 0;
+static unsigned char successive_press_status = 0;
+static volatile unsigned char successive_IO_LOW_status_times = 0;
+static unsigned char successive_press_keys[12] = {0x00};        // 使能连点按键, 表示按键是否被使能连点
+#endif
 
 static volatile unsigned char io_key_status;            // merged io key
 static unsigned char motor_flag = 1;                    // 清除初始化的占空比值 Clear the initialised duty cycle value
@@ -232,6 +251,7 @@ static inline void send_data_to_host(void)
 #endif
         if(register_temp)
             xbox360_tx_data(usbfd, data_send_to_host, 20);
+
 #if MOVEMENTS_SEND
         for(int i = 0; i < 20; i++)
             data_send_to_host_temp[i] = data_send_to_host[i];
@@ -246,7 +266,7 @@ void my_read_key(void)
         count_all_func[2] = 0;
         printf("------ %s -- start\n", __func__);
     }
-#endif   
+#endif
 
 #if READ_KEY
     L_rocker_io_key = ( gpio_read(IO_PORTA_07) ) ^ 0x01;
@@ -255,10 +275,10 @@ void my_read_key(void)
     L_1_io_key = ( gpio_read(IO_PORTB_05) ) ^ 0x01;
     R_1_io_key = ( gpio_read(IO_PORTB_07) ) ^ 0x01;
 
-    my_key_val_1 = ( gpio_read(IO_PORTA_08) ) ^ 0x01;
-    my_key_val_2 = ( gpio_read(IO_PORTA_11) ) ^ 0x01;
-    my_key_val_3 = ( gpio_read(IO_PORTA_12) ) ^ 0x01;
-    my_key_val_4 = ( gpio_read(IO_PORTA_14) ) ^ 0x01;
+    my_key_val_1 = ( gpio_read(IO_PORTA_08) ) ^ 0x01;   // ↑
+    my_key_val_2 = ( gpio_read(IO_PORTA_11) ) ^ 0x01;   // ↓
+    my_key_val_3 = ( gpio_read(IO_PORTA_12) ) ^ 0x01;   // ←
+    my_key_val_4 = ( gpio_read(IO_PORTA_14) ) ^ 0x01;   // →
 
     a_key_val = ( gpio_read(IO_PORTB_11) ) ^ 0x01;
     b_key_val = ( gpio_read(IO_PORTB_06) ) ^ 0x01;
@@ -267,7 +287,66 @@ void my_read_key(void)
 
     start_io_key = ( gpio_read(IO_PORTC_00) ) ^ 0x01;
     back_io_key = ( gpio_read(IO_PORTC_07) ) ^ 0x01;
-    XboxHome_io_key = ( gpio_read(IO_PORTC_01) ) ^ 0x01;
+    XboxBar_io_key = ( gpio_read(IO_PORTC_01) ) ^ 0x01;
+
+    successive_press_key = ( gpio_read(IO_PORTC_03) ) ^ 0x01;   // 就这样, 别动
+    // JL_PORTA->IN |= BIT(0);  // 输入选择
+#endif
+
+#if SUCCESSIVE_PRESS
+    if(successive_press_key)
+    {   
+        if((tcc_count % (400 / MAIN_TCC_TIMER) ) == 0)
+        {
+            if( my_key_val_1 && successive_press_key ){   successive_press_keys[0] ^= 0X01; }
+            if( my_key_val_2 && successive_press_key ){   successive_press_keys[1] ^= 0X01; }
+            if( my_key_val_3 && successive_press_key ){   successive_press_keys[2] ^= 0X01; }
+            if( my_key_val_4 && successive_press_key ){   successive_press_keys[3] ^= 0X01; }
+
+            if( a_key_val && successive_press_key ){    successive_press_keys[4] ^= 0X01;   }
+            if( b_key_val && successive_press_key ){    successive_press_keys[5] ^= 0X01;   }
+            if( x_key_val && successive_press_key ){    successive_press_keys[6] ^= 0X01;   }
+            if( y_key_val && successive_press_key ){    successive_press_keys[7] ^= 0X01;   }
+
+            if( L_1_io_key && successive_press_key ){   successive_press_keys[8] ^= 0X01;   }
+            if( R_1_io_key && successive_press_key ){   successive_press_keys[9] ^= 0X01;   }
+
+            if( L_rocker_io_key && successive_press_key ){    successive_press_keys[10] ^= 0X01;    }
+            if( R_rocker_io_key && successive_press_key ){    successive_press_keys[11] ^= 0X01;    }
+        }
+        
+    }
+
+    for(int i = 0; i < 12; i++)
+    {
+        successive_press_status = successive_press_keys[i];
+        if(successive_press_status)
+            break;
+    }
+
+    if(successive_press_status)
+    {
+        unsigned int frequency = 8;  // Hz
+        if( my_key_val_1 && successive_press_keys[0] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){   my_key_val_1 = 0x00;   }
+        if( my_key_val_2 && successive_press_keys[1] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){   my_key_val_2 = 0x00;   }
+        if( my_key_val_3 && successive_press_keys[2] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){   my_key_val_3 = 0x00;   }
+        if( my_key_val_4 && successive_press_keys[3] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){   my_key_val_4 = 0x00;   }
+
+        if( a_key_val && successive_press_keys[4] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){    a_key_val = 0x00;   }
+        if( b_key_val && successive_press_keys[5] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){    b_key_val = 0x00;   }
+        if( x_key_val && successive_press_keys[6] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){    x_key_val = 0x00;   }
+        if( y_key_val && successive_press_keys[7] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){    y_key_val = 0x00;   }
+
+        if( L_1_io_key && successive_press_keys[8] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){   L_1_io_key = 0x00; }
+        if( R_1_io_key && successive_press_keys[9] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){   R_1_io_key = 0x00; }
+
+        if( L_rocker_io_key && successive_press_keys[10] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){    L_rocker_io_key = 0x00;    }
+        if( R_rocker_io_key && successive_press_keys[11] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)) ){    R_rocker_io_key = 0x00;    }
+
+        if(SUCCESSIVE_OF_CYCLICALITY(frequency) < successive_IO_LOW_status_times)
+            successive_IO_LOW_status_times = 0;
+        successive_IO_LOW_status_times++;
+    }
 #endif
 
 #if MERGE_KEY   /* IO key */
@@ -286,7 +365,7 @@ void my_read_key(void)
         io_key_status = 0x00;      /* using the variant have to set zero , in the after assign the value*/
         io_key_status = merge_value(io_key_status, L_1_io_key, 0);                              //  left_1
         io_key_status = merge_value(io_key_status, R_1_io_key, 1);                              // right_1
-        io_key_status = merge_value(io_key_status, XboxHome_io_key, 2);                         // xbox home
+        io_key_status = merge_value(io_key_status, XboxBar_io_key, 2);                         // xbox home
         io_key_status = merge_value(io_key_status, a_key_val, 4);                               // A
         io_key_status = merge_value(io_key_status, b_key_val, 5);                               // B
         io_key_status = merge_value(io_key_status, x_key_val, 6);                               // X
@@ -295,8 +374,10 @@ void my_read_key(void)
 
 #endif  /* IO key */
 
+#if MY_PRINTF
     if((tcc_count % (1000 / MAIN_TCC_TIMER) ) == 0)
         printf("---------- %s ----------", __func__);
+#endif
 
 #if FUNC_TIMESTAMP
     while(count_all_func[3]){
@@ -305,7 +386,7 @@ void my_read_key(void)
     }
 #endif
 }
-    
+
 void read_trigger_value(void)
 {
 #if FUNC_TIMESTAMP
@@ -314,7 +395,7 @@ void read_trigger_value(void)
         printf("------ %s -- start\n", __func__);
     }
 #endif
-    
+
 
 #if TRIGGER   /* trigger */
     L_trigger_ad_key = adc_get_value(8);
@@ -386,7 +467,7 @@ void left_read_rocker(void)
     unsigned char L_Y_minus = 0;     //Y-
 
 
-#if LEFT_ROCKER  
+#if LEFT_ROCKER
 
     /* parametric is adc CHANNEL */
     my_rocker_ad_key_x = adc_get_value(1);  //ADC1
@@ -427,65 +508,65 @@ void left_read_rocker(void)
 
 #if LEFT_ROCKER_BUFFER   /* left rocker value buffer */
 #if LEFT_ROCKER_X_AXIS   /* X axis */
-        if(L_X_plus != 0 || L_X_minus != 0)
+    if(L_X_plus != 0 || L_X_minus != 0)
+    {
+        if(L_X_plus >= 127 && L_X_minus == 0)      // X+
         {
-            if(L_X_plus >= 127 && L_X_minus == 0)      // X+
-            {
-                data_send_to_host[6] = 0xff;    //left rocker
-                data_send_to_host[7] = 0x7f;
-            }
-            if(L_X_plus < 127 && L_X_minus == 0)
-            {
-                data_send_to_host[6] = 0x00;    //left rocker
-                data_send_to_host[7] = L_X_plus;
-            }
-
-            if(L_X_plus == 0 && L_X_minus <= 0x80)    // X-
-            {
-                data_send_to_host[6] = 0x00;    //left rocker
-                data_send_to_host[7] = 0x80;;
-            }
-            if(L_X_plus == 0 && L_X_minus != 0 && L_X_minus > 0x80)
-            {
-                data_send_to_host[6] = 0x00;    //left rocker
-                data_send_to_host[7] = L_X_minus;
-            }
+            data_send_to_host[6] = 0xff;    //left rocker
+            data_send_to_host[7] = 0x7f;
         }
+        if(L_X_plus < 127 && L_X_minus == 0)
+        {
+            data_send_to_host[6] = 0x00;    //left rocker
+            data_send_to_host[7] = L_X_plus;
+        }
+
+        if(L_X_plus == 0 && L_X_minus <= 0x80)    // X-
+        {
+            data_send_to_host[6] = 0x00;    //left rocker
+            data_send_to_host[7] = 0x80;;
+        }
+        if(L_X_plus == 0 && L_X_minus != 0 && L_X_minus > 0x80)
+        {
+            data_send_to_host[6] = 0x00;    //left rocker
+            data_send_to_host[7] = L_X_minus;
+        }
+    }
 #endif
 
-        if( (L_X_minus == 0 && L_X_plus == 0) && (L_Y_minus == 0 && L_Y_plus == 0) )       // median value
-        {
-            data_send_to_host[6] = 0x00;        //left rocker X
-                data_send_to_host[7] = 0x00;
-            data_send_to_host[8] = 0x00;        //left rocker Y
-                data_send_to_host[9] = 0Xff;
-        }
+    if( (L_X_minus == 0 && L_X_plus == 0) && (L_Y_minus == 0 && L_Y_plus == 0) )       // median value
+    {
+        data_send_to_host[6] = 0x00;        //left rocker X
+            data_send_to_host[7] = 0x00;
+        data_send_to_host[8] = 0x00;        //left rocker Y
+            data_send_to_host[9] = 0Xff;
+    }
 
 #if LEFT_ROCKER_Y_AXIS   /* Y axis */
-        if(L_Y_plus != 0 || L_Y_minus != 0)
+    if(L_Y_plus != 0 || L_Y_minus != 0)
+    {
+        if(L_Y_plus >= 127 && L_Y_minus == 0)
         {
-            if(L_Y_plus >= 127 && L_Y_minus == 0)
-            {
-                data_send_to_host[8] = 0xff;    //left rocker
-                data_send_to_host[9] = 0x7f;
-            }
-            if(L_Y_plus < 127 && L_Y_minus == 0)
-            {
-                data_send_to_host[8] = 0x00;    //left rocker
-                data_send_to_host[9] = L_Y_plus;
-            }
-
-            if(L_Y_plus == 0 && L_Y_minus <= 0x80)
-            {
-                data_send_to_host[8] = 0x00;    //left rocker
-                data_send_to_host[9] = 0x80;
-            }
-            if(L_Y_plus == 0 && L_Y_minus != 0 && L_Y_minus > 0x80)
-            {
-                data_send_to_host[8] = 0x00;    //left rocker
-                data_send_to_host[9] = L_Y_minus;
-            }
+            data_send_to_host[8] = 0xff;    //left rocker
+            data_send_to_host[9] = 0x7f;
         }
+        if(L_Y_plus < 127 && L_Y_minus == 0)
+        {
+            data_send_to_host[8] = 0x00;    //left rocker
+            data_send_to_host[9] = L_Y_plus;
+        }
+
+        if(L_Y_plus == 0 && L_Y_minus <= 0x80)
+        {
+            data_send_to_host[8] = 0x00;    //left rocker
+            data_send_to_host[9] = 0x80;
+        }
+        if(L_Y_plus == 0 && L_Y_minus != 0 && L_Y_minus > 0x80)
+        {
+            data_send_to_host[8] = 0x00;    //left rocker
+            data_send_to_host[9] = L_Y_minus;
+        }
+    }
 #endif
 #endif  /* left rocker value buffer */
 
@@ -505,14 +586,14 @@ void right_read_rocker(void)
         printf("------ %s -- start\n", __func__);
     }
 #endif
-        
+
     /* Right */
     unsigned char R_X_plus = 0;      //X+
     unsigned char R_X_minus = 0;     //X-
     unsigned char R_Y_plus = 0;      //Y+
     unsigned char R_Y_minus = 0;     //Y-
 
-    
+
 
 
 #if RIGHT_ROCKER
@@ -554,65 +635,65 @@ void right_read_rocker(void)
 
 #if RIGHT_ROCKER_BUFFER   /* right rocker value buffer */
 #if RIGHT_ROCKER_X_AXIS   /* X axis */
-        if(R_X_plus != 0 || R_X_minus != 0)
+    if(R_X_plus != 0 || R_X_minus != 0)
+    {
+        if(R_X_plus >= 127 && R_X_minus == 0)      // X+
         {
-            if(R_X_plus >= 127 && R_X_minus == 0)      // X+
-            {
-                data_send_to_host[10] = 0xff;   //right rocker
-                data_send_to_host[11] = 0x7f;
-            }
-            if(R_X_plus < 127 && R_X_minus == 0)
-            {
-                data_send_to_host[10] = 0x00;   //right rocker
-                data_send_to_host[11] = R_X_plus;
-            }
-
-            if(R_X_plus == 0 && R_X_minus <= 0x80)    // X-
-            {
-                data_send_to_host[10] = 0x00;   //right rocker
-                data_send_to_host[11] = 0x80;
-            }
-            if(R_X_plus == 0 && R_X_minus != 0 && R_X_minus > 0x80)
-            {
-                data_send_to_host[10] = 0x00;   //right rocker
-                data_send_to_host[11] = R_X_minus;
-            }
+            data_send_to_host[10] = 0xff;   //right rocker
+            data_send_to_host[11] = 0x7f;
         }
+        if(R_X_plus < 127 && R_X_minus == 0)
+        {
+            data_send_to_host[10] = 0x00;   //right rocker
+            data_send_to_host[11] = R_X_plus;
+        }
+
+        if(R_X_plus == 0 && R_X_minus <= 0x80)    // X-
+        {
+            data_send_to_host[10] = 0x00;   //right rocker
+            data_send_to_host[11] = 0x80;
+        }
+        if(R_X_plus == 0 && R_X_minus != 0 && R_X_minus > 0x80)
+        {
+            data_send_to_host[10] = 0x00;   //right rocker
+            data_send_to_host[11] = R_X_minus;
+        }
+    }
 #endif
 
-        if( (R_X_minus == 0 && R_X_plus == 0) && (R_X_minus == 0 && R_Y_plus == 0) )       // median value
-        {
-            data_send_to_host[10] = 0x00;        //right rocker X
-                data_send_to_host[11] = 0x00;
-            data_send_to_host[12] = 0x00;        //right rocker Y
-                data_send_to_host[13] = 0Xff;
-        }
+    if( (R_X_minus == 0 && R_X_plus == 0) && (R_X_minus == 0 && R_Y_plus == 0) )       // median value
+    {
+        data_send_to_host[10] = 0x00;        //right rocker X
+            data_send_to_host[11] = 0x00;
+        data_send_to_host[12] = 0x00;        //right rocker Y
+            data_send_to_host[13] = 0Xff;
+    }
 
 #if RIGHT_ROCKER_Y_AXIS   /* Y axis */
-        if(R_Y_plus != 0 || R_Y_minus != 0)
+    if(R_Y_plus != 0 || R_Y_minus != 0)
+    {
+        if(R_Y_plus >= 127 && R_Y_minus == 0)
         {
-            if(R_Y_plus >= 127 && R_Y_minus == 0)
-            {
-                data_send_to_host[12] = 0xff;   //right rocker
-                data_send_to_host[13] = 0x7f;
-            }
-            if(R_Y_plus < 127 && R_Y_minus == 0)
-            {
-                data_send_to_host[12] = 0x00;   //right rocker
-                data_send_to_host[13] = R_Y_plus;
-            }
-
-            if(R_Y_plus == 0 && R_Y_minus <= 0x80)
-            {
-                data_send_to_host[12] = 0x00;   //right rocker
-                data_send_to_host[13] = 0x80;
-            }
-            if(R_Y_plus == 0 && R_Y_minus != 0 && R_Y_minus > 0x80)
-            {
-                data_send_to_host[12] = 0x00;   //right rocker
-                data_send_to_host[13] = R_Y_minus;
-            }
+            data_send_to_host[12] = 0xff;   //right rocker
+            data_send_to_host[13] = 0x7f;
         }
+        if(R_Y_plus < 127 && R_Y_minus == 0)
+        {
+            data_send_to_host[12] = 0x00;   //right rocker
+            data_send_to_host[13] = R_Y_plus;
+        }
+
+        if(R_Y_plus == 0 && R_Y_minus <= 0x80)
+        {
+            data_send_to_host[12] = 0x00;   //right rocker
+            data_send_to_host[13] = 0x80;
+        }
+        if(R_Y_plus == 0 && R_Y_minus != 0 && R_Y_minus > 0x80)
+        {
+            data_send_to_host[12] = 0x00;   //right rocker
+            data_send_to_host[13] = R_Y_minus;
+        }
+    }
 #endif
 #endif  /* right rocker value buffer */
 
@@ -633,8 +714,8 @@ void my_led_function(void)
         printf("------ %s -- start\n", __func__);
     }
 #endif
-    
-    
+
+
     // 清除初始化的占空比值 Clear the initialised duty cycle value
     while(motor_flag)
     {
@@ -686,16 +767,17 @@ void my_led_function(void)
 #endif  /* right motor */
 #endif
 
-
         //printf("USB : %X \n", JL_USB->CON0);            // get USB_CON0 register
-        
+
         //printf("watch dog stutas : %x\n", p33_rx_1byte(P3_WDT_CON));  // use this function read watch dog status from this address
 
-        /* Cannot be re-entered for a short time */
+            /* Cannot be re-entered for a short time */
         //pwm_led_breathe_display(1, 500, BRIGHT, BRIGHT, 0, 100, 0);
-            
+
+#if MY_PRINTF
     if( (tcc_count % (1000 / LED_TCC_TIMER) ) == 0 )
         printf("---------- %s ----------", __func__);
+#endif
 
 #if FUNC_TIMESTAMP
     while (count_all_func[1])
@@ -703,7 +785,7 @@ void my_led_function(void)
         count_all_func[1] = 0;
         printf("------ %s -- end \n", __func__);
     }
-#endif   
+#endif
 }
 
 void connect_flicker(void)
@@ -712,7 +794,7 @@ void connect_flicker(void)
         return;
     switch (player_led)
     {
-    case 1:{    /* player 1 */ 
+    case 1:{    /* player 1 */
         if( (tcc_conut_led % (240 / LED_TCC_TIMER) ) == 0 ){
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_03, (int)player_IO_status );
@@ -745,6 +827,15 @@ void connect_flicker(void)
     }
 }
 
+void records_movement(void)
+{
+#if RECORS_MOVEMENT
+
+    if( (tcc_connt_SpecialFunc % (1000 / SPECIAL_FUNC_TCC) ) == 0 )
+        printf("---- %s __ successive_press: %d", __func__, successive_press_key);
+#endif
+}
+
 void* my_task(void* p_arg)
 {
     int msg[8];     // in the array, recive task queue
@@ -757,24 +848,24 @@ void* my_task(void* p_arg)
 
         switch(msg[0])
         {
-            case MAIN_TCC_TASK:
-            {
+            case MAIN_TCC_TASK:{
                 my_read_key();
                 left_read_rocker();
                 right_read_rocker();
                 read_trigger_value();
                 send_data_to_host();
-                
             }
             break;
-            case BREATHE_LED_TASK:
-            {
+            case BREATHE_LED_TASK:{
                 my_led_function();
                 if(player_flicker_time == 1 && player_IO_status == 1)
                     break;
                 connect_flicker();
             }
             break;
+            case SPECIAL_FUNCTIONS:{
+                records_movement();
+            }
 
         default:
             break;
@@ -797,7 +888,7 @@ void my_button_init(void)
     gpio_set_direction(IO_PORTA_01, 0);         /* LED0 */
     gpio_set_direction(IO_PORTA_03, 0);         /* LED2 */
 
-    /*set IO input*/
+    /* set IO input */
     gpio_set_direction(IO_PORTA_05, 1);         // ADC, rocker L_X
     gpio_set_direction(IO_PORTA_06, 1);         // ADC, rocker L_Y
     gpio_set_direction(IO_PORTA_07, 1);         // IO,  rocker L_3
@@ -807,10 +898,10 @@ void my_button_init(void)
     gpio_set_direction(IO_PORTA_12, 1);         /* ← */
     gpio_set_direction(IO_PORTA_14, 1);         /* → */
 
-    gpio_set_direction(IO_PORTB_09, 1);         /* A */
-    gpio_set_direction(IO_PORTB_11, 1);         /* B */
-    gpio_set_direction(IO_PORTB_13, 1);         /* X */
-    gpio_set_direction(IO_PORTB_15, 1);         /* Y */
+    gpio_set_direction(IO_PORTB_09, 1);         /* X */
+    gpio_set_direction(IO_PORTB_11, 1);         /* A */
+    gpio_set_direction(IO_PORTB_04, 1);         /* B */
+    gpio_set_direction(IO_PORTB_06, 1);         /* Y */
 
     gpio_set_direction(IO_PORTB_02, 1);         // IO,  rocker R_3
     gpio_set_direction(IO_PORTB_01, 1);         // ADC, rocker R_X
@@ -822,11 +913,11 @@ void my_button_init(void)
     gpio_set_direction(IO_PORTB_08, 1);         // ADC, left trigger
     gpio_set_direction(IO_PORTB_10, 1);         // ADC, right trigger
 
-    gpio_set_direction(IO_PORTC_00, 1);
-    gpio_set_direction(IO_PORTC_01, 1);
-    gpio_set_direction(IO_PORTC_03, 1);
+    gpio_set_direction(IO_PORTC_00, 1);         // start key
+    gpio_set_direction(IO_PORTC_01, 1);         // Xbox Bar
+    gpio_set_direction(IO_PORTC_03, 1);         // successive press key
     gpio_set_direction(IO_PORTC_05, 1);
-    gpio_set_direction(IO_PORTC_07, 1);
+    gpio_set_direction(IO_PORTC_07, 1);         // back key
 
     printf("set output or input\n");
 
@@ -857,11 +948,11 @@ void my_button_init(void)
     gpio_set_die(IO_PORTB_08, 0);           // ADC, left trigger
     gpio_set_die(IO_PORTB_10, 0);           // ADC, right trigger
 
-    gpio_set_die(IO_PORTC_00, 1);
-    gpio_set_die(IO_PORTC_01, 1);
-    gpio_set_die(IO_PORTC_03, 1);
+    gpio_set_die(IO_PORTC_00, 1);           // start key
+    gpio_set_die(IO_PORTC_01, 1);           // Xbox Bar
+    gpio_set_die(IO_PORTC_03, 1);           // successive press key
     gpio_set_die(IO_PORTC_05, 1);
-    gpio_set_die(IO_PORTC_07, 1);
+    gpio_set_die(IO_PORTC_07, 1);           // back key
 
     printf("set output mode\n");
 /*************************************************************************************/
@@ -895,11 +986,11 @@ void my_button_init(void)
     gpio_set_pull_down(IO_PORTA_01, 0);         /* LED0 */
     gpio_set_pull_down(IO_PORTA_03, 0);         /* LED2 */
 
-    gpio_set_pull_down(IO_PORTC_00, 0);
-    gpio_set_pull_down(IO_PORTC_01, 0);
-    gpio_set_pull_down(IO_PORTC_03, 0);
+    gpio_set_pull_down(IO_PORTC_00, 0);         // start key
+    gpio_set_pull_down(IO_PORTC_01, 0);         // Xbox Bar
+    gpio_set_pull_down(IO_PORTC_03, 0);         // successive press key
     gpio_set_pull_down(IO_PORTC_05, 0);
-    gpio_set_pull_down(IO_PORTC_07, 0);
+    gpio_set_pull_down(IO_PORTC_07, 0);         // back key
 
     printf("set pull down or no pull down\n");
 /*************************************************************************************/
@@ -933,11 +1024,11 @@ void my_button_init(void)
     gpio_set_pull_up(IO_PORTA_01, 1);          /* LED0 */
     gpio_set_pull_up(IO_PORTA_03, 1);          /* LED2 */
 
-    gpio_set_pull_up(IO_PORTC_00, 1);
-    gpio_set_pull_up(IO_PORTC_01, 1);
-    gpio_set_pull_up(IO_PORTC_03, 1);
+    gpio_set_pull_up(IO_PORTC_00, 1);           // start key
+    gpio_set_pull_up(IO_PORTC_01, 1);           // Xbox Bar
+    gpio_set_pull_up(IO_PORTC_03, 1);           // successive press key
     gpio_set_pull_up(IO_PORTC_05, 1);
-    gpio_set_pull_up(IO_PORTC_07, 1);
+    gpio_set_pull_up(IO_PORTC_07, 1);           // back key
 
     printf("set pull up or no pull up\n");
 /*************************************************************************************/
@@ -1027,9 +1118,20 @@ static inline void* led_timer_task(void* p_arg)
         tcc_conut_led = 0;
     int ret = os_taskq_post_type(MY_TASK_NAME, BREATHE_LED_TASK, 0, NULL);
     if(ret != OS_NO_ERR)
-        log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
+        log_print(__LOG_ERROR, NULL, "FAIL ! ! !    BREATHE_LED_TASK return value : %d\n", ret);
 
     tcc_conut_led++;
+    return &ret;
+}
+static inline void* SpecialFunc_timer_task(void* p_arg)
+{
+    if( tcc_connt_SpecialFunc == 65534 )
+        tcc_connt_SpecialFunc = 0;
+    int ret = os_taskq_post_type(MY_TASK_NAME, SPECIAL_FUNCTIONS, 0, NULL);
+    if(ret != OS_NO_ERR)
+        log_print(__LOG_ERROR, NULL, "FAIL ! ! !    SPECIAL_FUNCTIONS return value : %d\n", ret);
+
+    tcc_connt_SpecialFunc++;
     return &ret;
 }
 
@@ -1056,6 +1158,11 @@ void my_task_init(void)
     /* Failure to complete a task within the timer send event time causes the task queue to overflow. */
     ret_id_timer_led = sys_hi_timer_add(NULL, led_timer_task, LED_TCC_TIMER);
     log_print(__LOG_INFO, NULL, "LED timer task ID : %d\n", ret_id_timer_led);
+#endif
+
+#if 1
+    ret_id_timer_SpecialFunctions = sys_hi_timer_add(NULL, SpecialFunc_timer_task, SPECIAL_FUNC_TCC);
+    log_print(__LOG_INFO, NULL, "Special_Functions timer task ID : %d\n", ret_id_timer_SpecialFunctions);
 #endif
     /* printf pwm model info */
     //log_pwm_led_info();
