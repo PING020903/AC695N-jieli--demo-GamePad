@@ -20,6 +20,7 @@
 
 #include "generic/gpio.h"
 #include "generic/log.h"
+#include "generic/list.h"
 #include "asm/mcpwm.h"
 
 /**************define-switch, 宏开关**************/
@@ -45,10 +46,14 @@
 #define RIGHT_ROCKER_Y_AXIS 1
 
 #define SUCCESSIVE_PRESS    1
-#define RECORS_MOVEMENT     1
+#define RECORD_MOVEMENT     1
 
 #define FUNC_TIMESTAMP      0
 
+#define THREAD_CREATE       1
+#define MAIN_TIMER          1
+#define PWM_TIEMR           1
+#define SPECIAL_FUNC_TIMER  1
 #define MY_PRINTF           0
 /***********************************************/
 
@@ -163,11 +168,38 @@ static int trigger_value_R = 0;
 #define SUCCESSIVE_TCC_TIMER                (500)
 #define SUCCESSIVE_OF_CYCLICALITY(a)        (250U / (unsigned int)a)
 #define SUCCESSIVE_OF_HALF_CYCLICALITY(a)   ((250U / (unsigned int)a) / 2)     // 1000ms / x(Hz) = CYCLICALITY_TIMES, 该半周期值是近似值
-static volatile unsigned char successive_press_key = 0;
-static unsigned char successive_press_flag = 0;
-static unsigned char successive_press_status = 0;
+static volatile unsigned char successive_press_key  = 0;
+static unsigned char successive_press_status        = 0;
+static unsigned char successive_flag                = 1;            // 标志位不要放在函数内
 static volatile unsigned char successive_IO_LOW_status_times = 0;
-static unsigned char successive_press_keys[12] = {0x00};        // 使能连点按键, 表示按键是否被使能连点
+static unsigned char successive_press_keys[12] = {0x00};            // 使能连点按键, 表示按键是否被使能连点
+#endif
+
+#if RECORD_MOVEMENT
+#define CHAR_SIZE_NEXT  (4)
+#define SHORT_SIZE_NEXT (2)
+static unsigned char records_movement_key;              // 记录键被按下, 开始记录
+#if 0   // 复杂化了, 使用链表存储可能会更好
+static unsigned int records_keys[12] = {0x00};          // 记录键值与时间
+static unsigned int* records_keys_point = &records_keys;// 第一次:  *((unsigned char*)records_keys_point + (4 * 0) ) = data_send_to_host[2],
+                                                        //          *((unsigned char*)records_keys_point + (4 * 0) ) = data_send_to_host[3],
+                                                        //          *((unsigned short*)records_keys_point + 1 + (2 * 0) ) = time;  //  记录持续时间, record duration
+                                                        //
+                                                        // 下一次:  *((unsigned char*)records_keys_point + (4 * 1) ) = data_send_to_host[2],
+                                                        //          *((unsigned char*)records_keys_point + 1 + (4 * 1) ) = data_send_to_host[3],
+                                                        //          *((unsigned short*)records_keys_point + 1 + (2 * 1) ) = time;
+                                                        //
+                                                        // 下下次:  *((unsigned char*)records_keys_point + (4 * 2)) = data_send_to_host[2],
+                                                        //          *((unsigned char*)records_keys_point + 1 + (4 * 2)) = data_send_to_host[3],
+                                                        //          *((unsigned short*)records_keys_point + 1 + (2 * 2)) = time;    // Max time is 0xff
+#endif
+struct keys_info_node
+{
+    struct list_head node;      // 2 points, 16-byte
+    unsigned int record_times;  // 4-byte
+    unsigned char keys_data[2]; // 2 char, 2-byte
+};
+
 #endif
 
 static volatile unsigned char io_key_status;            // merged io key
@@ -289,32 +321,45 @@ void my_read_key(void)
     back_io_key = ( gpio_read(IO_PORTC_07) ) ^ 0x01;
     XboxBar_io_key = ( gpio_read(IO_PORTC_01) ) ^ 0x01;
 
-    successive_press_key = ( gpio_read(IO_PORTC_03) ) ^ 0x01;   // 就这样, 别动
+
     // JL_PORTA->IN |= BIT(0);  // 输入选择
 #endif
 
-#if SUCCESSIVE_PRESS
-    if(successive_press_key)
-    {   
+#if RECORD_MOVEMENT
+    if(( gpio_read(IO_PORTC_05) ) ^ 0x01)
+    {
         if((tcc_count % (400 / MAIN_TCC_TIMER) ) == 0)
-        {
-            if( my_key_val_1 && successive_press_key ){   successive_press_keys[0] ^= 0X01; }
-            if( my_key_val_2 && successive_press_key ){   successive_press_keys[1] ^= 0X01; }
-            if( my_key_val_3 && successive_press_key ){   successive_press_keys[2] ^= 0X01; }
-            if( my_key_val_4 && successive_press_key ){   successive_press_keys[3] ^= 0X01; }
+            records_movement_key = ( gpio_read(IO_PORTC_05) ) ^ 0x01;
+    }
+#endif
 
-            if( a_key_val && successive_press_key ){    successive_press_keys[4] ^= 0X01;   }
-            if( b_key_val && successive_press_key ){    successive_press_keys[5] ^= 0X01;   }
-            if( x_key_val && successive_press_key ){    successive_press_keys[6] ^= 0X01;   }
-            if( y_key_val && successive_press_key ){    successive_press_keys[7] ^= 0X01;   }
+#if SUCCESSIVE_PRESS
+    if(( gpio_read(IO_PORTC_03) ) ^ 0x01)
+    {
+        successive_flag = 0;
+        successive_press_key = ( gpio_read(IO_PORTC_03) ) ^ 0x01;   // 就这样, 别动
+    }
+    if( (( gpio_read(IO_PORTC_03) ) == 1) /* && ((tcc_count % (400 / MAIN_TCC_TIMER) ) == 0) */ && (successive_flag == 0) )
+    {
+        if( my_key_val_1 && successive_press_key ){   successive_press_keys[0] ^= 0X01; }
+        if( my_key_val_2 && successive_press_key ){   successive_press_keys[1] ^= 0X01; }
+        if( my_key_val_3 && successive_press_key ){   successive_press_keys[2] ^= 0X01; }
+        if( my_key_val_4 && successive_press_key ){   successive_press_keys[3] ^= 0X01; }
 
-            if( L_1_io_key && successive_press_key ){   successive_press_keys[8] ^= 0X01;   }
-            if( R_1_io_key && successive_press_key ){   successive_press_keys[9] ^= 0X01;   }
+        if( a_key_val && successive_press_key ){    successive_press_keys[4] ^= 0X01;   }
+        if( b_key_val && successive_press_key ){    successive_press_keys[5] ^= 0X01;   }
+        if( x_key_val && successive_press_key ){    successive_press_keys[6] ^= 0X01;   }
+        if( y_key_val && successive_press_key ){    successive_press_keys[7] ^= 0X01;   }
 
-            if( L_rocker_io_key && successive_press_key ){    successive_press_keys[10] ^= 0X01;    }
-            if( R_rocker_io_key && successive_press_key ){    successive_press_keys[11] ^= 0X01;    }
-        }
-        
+        if( L_1_io_key && successive_press_key ){   successive_press_keys[8] ^= 0X01;   }
+        if( R_1_io_key && successive_press_key ){   successive_press_keys[9] ^= 0X01;   }
+
+        if( L_rocker_io_key && successive_press_key ){    successive_press_keys[10] ^= 0X01;    }
+        if( R_rocker_io_key && successive_press_key ){    successive_press_keys[11] ^= 0X01;    }
+        successive_flag = 1;
+        printf("in the (if), 1>%d, 2>%d, 3>%d, 4>%d, 5>%d, 6>%d, 7>%d, 8>%d, 9>%d, 10>%d, 11>%d, 12>%d, ", successive_press_keys[0], successive_press_keys[1],
+        successive_press_keys[2], successive_press_keys[3], successive_press_keys[4], successive_press_keys[5], successive_press_keys[6], successive_press_keys[7],
+        successive_press_keys[8], successive_press_keys[9], successive_press_keys[10], successive_press_keys[11]);
     }
 
     for(int i = 0; i < 12; i++)
@@ -350,27 +395,29 @@ void my_read_key(void)
 #endif
 
 #if MERGE_KEY   /* IO key */
-        io_key_status = 0x00;   /* using the variant have to set zero , in the after assign the value*/
-        io_key_status = merge_value(io_key_status, my_key_val_3, 0);                            // ↑up
-        io_key_status = merge_value(io_key_status, my_key_val_2, 1);                            // ↓dowm
-        io_key_status = merge_value(io_key_status, my_key_val_1, 2);                            // ←left
-        io_key_status = merge_value(io_key_status, my_key_val_4, 3);                            // →right
-        io_key_status = merge_value(io_key_status, start_io_key, 4);                            // start
-        io_key_status = merge_value(io_key_status, back_io_key, 5);                             // back
-        io_key_status = merge_value(io_key_status, L_rocker_io_key, 6);                         //  left_3
-        io_key_status = merge_value(io_key_status, R_rocker_io_key, 7);                         // right_3
-        data_send_to_host[2] = io_key_status;
+    io_key_status = 0x00;   /* using the variant have to set zero , in the after assign the value*/
+    io_key_status = merge_value(io_key_status, my_key_val_3, 0);                            // ↑up
+    io_key_status = merge_value(io_key_status, my_key_val_2, 1);                            // ↓dowm
+    io_key_status = merge_value(io_key_status, my_key_val_1, 2);                            // ←left
+    io_key_status = merge_value(io_key_status, my_key_val_4, 3);                            // →right
+    io_key_status = merge_value(io_key_status, start_io_key, 4);                            // start
+    io_key_status = merge_value(io_key_status, back_io_key, 5);                             // back
+    io_key_status = merge_value(io_key_status, L_rocker_io_key, 6);                         //  left_3
+    io_key_status = merge_value(io_key_status, R_rocker_io_key, 7);                         // right_3
+    data_send_to_host[2] = io_key_status;
+#if RECORD_MOVEMENT
 
+#endif
 
-        io_key_status = 0x00;      /* using the variant have to set zero , in the after assign the value*/
-        io_key_status = merge_value(io_key_status, L_1_io_key, 0);                              //  left_1
-        io_key_status = merge_value(io_key_status, R_1_io_key, 1);                              // right_1
-        io_key_status = merge_value(io_key_status, XboxBar_io_key, 2);                         // xbox home
-        io_key_status = merge_value(io_key_status, a_key_val, 4);                               // A
-        io_key_status = merge_value(io_key_status, b_key_val, 5);                               // B
-        io_key_status = merge_value(io_key_status, x_key_val, 6);                               // X
-        io_key_status = merge_value(io_key_status, y_key_val, 7);                               // Y
-        data_send_to_host[3] = io_key_status;
+    io_key_status = 0x00;      /* using the variant have to set zero , in the after assign the value*/
+    io_key_status = merge_value(io_key_status, L_1_io_key, 0);                              //  left_1
+    io_key_status = merge_value(io_key_status, R_1_io_key, 1);                              // right_1
+    io_key_status = merge_value(io_key_status, XboxBar_io_key, 2);                          // xbox home
+    io_key_status = merge_value(io_key_status, a_key_val, 4);                               // A
+    io_key_status = merge_value(io_key_status, b_key_val, 5);                               // B
+    io_key_status = merge_value(io_key_status, x_key_val, 6);                               // X
+    io_key_status = merge_value(io_key_status, y_key_val, 7);                               // Y
+    data_send_to_host[3] = io_key_status;
 
 #endif  /* IO key */
 
@@ -829,10 +876,12 @@ void connect_flicker(void)
 
 void records_movement(void)
 {
-#if RECORS_MOVEMENT
+#if RECORD_MOVEMENT
 
     if( (tcc_connt_SpecialFunc % (1000 / SPECIAL_FUNC_TCC) ) == 0 )
-        printf("---- %s __ successive_press: %d", __func__, successive_press_key);
+        printf("---- %s ----", __func__);
+
+
 #endif
 }
 
@@ -916,7 +965,7 @@ void my_button_init(void)
     gpio_set_direction(IO_PORTC_00, 1);         // start key
     gpio_set_direction(IO_PORTC_01, 1);         // Xbox Bar
     gpio_set_direction(IO_PORTC_03, 1);         // successive press key
-    gpio_set_direction(IO_PORTC_05, 1);
+    gpio_set_direction(IO_PORTC_05, 1);         // records movement key
     gpio_set_direction(IO_PORTC_07, 1);         // back key
 
     printf("set output or input\n");
@@ -951,7 +1000,7 @@ void my_button_init(void)
     gpio_set_die(IO_PORTC_00, 1);           // start key
     gpio_set_die(IO_PORTC_01, 1);           // Xbox Bar
     gpio_set_die(IO_PORTC_03, 1);           // successive press key
-    gpio_set_die(IO_PORTC_05, 1);
+    gpio_set_die(IO_PORTC_05, 1);           // records movement key
     gpio_set_die(IO_PORTC_07, 1);           // back key
 
     printf("set output mode\n");
@@ -989,7 +1038,7 @@ void my_button_init(void)
     gpio_set_pull_down(IO_PORTC_00, 0);         // start key
     gpio_set_pull_down(IO_PORTC_01, 0);         // Xbox Bar
     gpio_set_pull_down(IO_PORTC_03, 0);         // successive press key
-    gpio_set_pull_down(IO_PORTC_05, 0);
+    gpio_set_pull_down(IO_PORTC_05, 0);         // records movement key
     gpio_set_pull_down(IO_PORTC_07, 0);         // back key
 
     printf("set pull down or no pull down\n");
@@ -1027,7 +1076,7 @@ void my_button_init(void)
     gpio_set_pull_up(IO_PORTC_00, 1);           // start key
     gpio_set_pull_up(IO_PORTC_01, 1);           // Xbox Bar
     gpio_set_pull_up(IO_PORTC_03, 1);           // successive press key
-    gpio_set_pull_up(IO_PORTC_05, 1);
+    gpio_set_pull_up(IO_PORTC_05, 1);           // records movement key
     gpio_set_pull_up(IO_PORTC_07, 1);           // back key
 
     printf("set pull up or no pull up\n");
@@ -1103,8 +1152,6 @@ void my_PWM_output_init(void)
 
 static inline void* my_timer_task(void* p_arg)
 {
-    if( tcc_count == 65534 )
-        tcc_count = 0;
     int ret = os_taskq_post_type(MY_TASK_NAME, MAIN_TCC_TASK, 0, NULL);
     if(ret != OS_NO_ERR)
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
@@ -1114,8 +1161,6 @@ static inline void* my_timer_task(void* p_arg)
 }
 static inline void* led_timer_task(void* p_arg)
 {
-    if( tcc_conut_led == 65534 )
-        tcc_conut_led = 0;
     int ret = os_taskq_post_type(MY_TASK_NAME, BREATHE_LED_TASK, 0, NULL);
     if(ret != OS_NO_ERR)
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    BREATHE_LED_TASK return value : %d\n", ret);
@@ -1125,8 +1170,6 @@ static inline void* led_timer_task(void* p_arg)
 }
 static inline void* SpecialFunc_timer_task(void* p_arg)
 {
-    if( tcc_connt_SpecialFunc == 65534 )
-        tcc_connt_SpecialFunc = 0;
     int ret = os_taskq_post_type(MY_TASK_NAME, SPECIAL_FUNCTIONS, 0, NULL);
     if(ret != OS_NO_ERR)
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    SPECIAL_FUNCTIONS return value : %d\n", ret);
@@ -1144,15 +1187,22 @@ void my_task_init(void)
     my_button_init();
     my_PWM_output_init();
     data_send_to_host[1] = 0x14;
-#if 1
+
+#if RECORD_MOVEMENT
+struct keys_info_node key_info_head;
+#endif
+#if THREAD_CREATE
     /* create my task, remember do not set stack-size(stksize) too short. if send task queue ,do not set the queue-size(qsize) is zero */
     err = os_task_create(my_task, NULL, 1, 256, 32, MY_TASK_NAME);
     log_print(__LOG_INFO, NULL, "create my task ! ! !    ret = %d\n", err);
 
+#if MAIN_TIMER
     /* create user timer */
     ret_id_timer = sys_hi_timer_add(NULL, my_timer_task, MAIN_TCC_TIMER);
     log_print(__LOG_INFO, NULL, "Main timer task ID : %d\n", ret_id_timer);
+#endif
 
+#if PWM_TIEMR
     /*同一定时器中最好不要连续发送两次任务消息, 发送任务消息的时间要错开, 否则会因为发送了任务消息, 而任务收到后尚未处理完成, 又收到任务导致队列溢出*/
     /*定时器发送事件时间内未完成任务会导致任务队列溢出*/
     /* Failure to complete a task within the timer send event time causes the task queue to overflow. */
@@ -1160,9 +1210,10 @@ void my_task_init(void)
     log_print(__LOG_INFO, NULL, "LED timer task ID : %d\n", ret_id_timer_led);
 #endif
 
-#if 1
+#if SPECIAL_FUNC_TIMER
     ret_id_timer_SpecialFunctions = sys_hi_timer_add(NULL, SpecialFunc_timer_task, SPECIAL_FUNC_TCC);
     log_print(__LOG_INFO, NULL, "Special_Functions timer task ID : %d\n", ret_id_timer_SpecialFunctions);
+#endif
 #endif
     /* printf pwm model info */
     //log_pwm_led_info();
