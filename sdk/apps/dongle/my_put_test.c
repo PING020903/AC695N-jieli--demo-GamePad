@@ -23,38 +23,40 @@
 #include "asm/mcpwm.h"
 
 /**************define-switch, 宏开关**************/
-#define READ_KEY 1
-#define MERGE_KEY 1
-#define MOVEMENTS_SEND 1
+#define READ_KEY            1
+#define MERGE_KEY           1
+#define MOVEMENTS_SEND      1
 
-#define TRIGGER 1
-#define LEFT_TRIGGER 1
-#define RIGHT_TRIGGER 1
-#define PWM_MOTOR 1
-#define LEFT_MOTOR 1
-#define RIGHT_MOTOR 1
+#define TRIGGER             1
+#define LEFT_TRIGGER        1
+#define RIGHT_TRIGGER       1
+#define PWM_MOTOR           1
+#define LEFT_MOTOR          1
+#define RIGHT_MOTOR         1
 
-#define LEFT_ROCKER 1
-#define LEFT_ROCKER_BUFFER 1
-#define LEFT_ROCKER_X_AXIS 1
-#define LEFT_ROCKER_Y_AXIS 1
+#define LEFT_ROCKER         1
+#define LEFT_ROCKER_BUFFER  1
+#define LEFT_ROCKER_X_AXIS  1
+#define LEFT_ROCKER_Y_AXIS  1
 
-#define RIGHT_ROCKER 1
+#define RIGHT_ROCKER        1
 #define RIGHT_ROCKER_BUFFER 1
 #define RIGHT_ROCKER_X_AXIS 1
 #define RIGHT_ROCKER_Y_AXIS 1
 
-#define SUCCESSIVE_PRESS 1
-#define RECORD_MOVEMENT 1
+#define SUCCESSIVE_PRESS    1
 
-#define FUNC_TIMESTAMP 0
+#define FUNC_TIMESTAMP      0
 
-#define THREAD_CREATE 1
-#define MAIN_TIMER 1
-#define PWM_TIEMR 1
-#define SPECIAL_FUNC_TIMER 0
-#define MY_PRINTF 0
-#define MY_LIST 1
+#define THREAD_CREATE       1
+#define MAIN_TIMER          1
+#define PWM_TIEMR           1
+#define SPECIAL_FUNC_TIMER  0
+#define MY_PRINTF           0
+
+#define RECORD_MOVEMENT     1
+#define MY_LIST             0       // 用不了malloc(), 转用planA: 数组, (planB: 链表)我用不了
+#define MY_ARRAY            1
 /***********************************************/
 
 #if FUNC_TIMESTAMP
@@ -169,15 +171,19 @@ static unsigned char successive_press_keys[12] = {0x00}; // 使能连点按键, 
 #endif
 
 #if RECORD_MOVEMENT
-#define CHAR_SIZE_NEXT (4)
-#define SHORT_SIZE_NEXT (2)
 static unsigned char records_movement_key;      // 记录键被按下, 开始记录
 static unsigned char records_flag = 0;          // records ready
 static unsigned short RecordFunc_key_times = 0; // 记录该功能按键按下时间
-#if 0                                           // 复杂化了, 使用链表存储可能会更好
-static unsigned int records_keys[12] = {0x00};          // 记录键值与时间
+static volatile unsigned short record_times = 0;// 宏记录时长, Max time is 0xff
+#if MY_ARRAY
+#define CHAR_SIZE_NEXT      (4)
+#define SHORT_SIZE_NEXT     (2)
+#define RECORD_ARRAY_LEN    (24)
+static unsigned char reappear_record = 0;
+static unsigned char records_length = 0;
+static unsigned int records_keys[RECORD_ARRAY_LEN] = {0x00};          // 记录键值与时间
 static unsigned int* records_keys_point = &records_keys;// 第一次:  *((unsigned char*)records_keys_point + (4 * 0) ) = data_send_to_host[2],
-                                                        //          *((unsigned char*)records_keys_point + (4 * 0) ) = data_send_to_host[3],
+                                                        //          *((unsigned char*)records_keys_point + 1 + (4 * 0) ) = data_send_to_host[3],
                                                         //          *((unsigned short*)records_keys_point + 1 + (2 * 0) ) = time;  //  记录持续时间, record duration
                                                         //
                                                         // 下一次:  *((unsigned char*)records_keys_point + (4 * 1) ) = data_send_to_host[2],
@@ -186,8 +192,9 @@ static unsigned int* records_keys_point = &records_keys;// 第一次:  *((unsign
                                                         //
                                                         // 下下次:  *((unsigned char*)records_keys_point + (4 * 2)) = data_send_to_host[2],
                                                         //          *((unsigned char*)records_keys_point + 1 + (4 * 2)) = data_send_to_host[3],
-                                                        //          *((unsigned short*)records_keys_point + 1 + (2 * 2)) = time;    // Max time is 0xff
+                                                        //          *((unsigned short*)records_keys_point + 1 + (2 * 2)) = time;
 #endif
+#if MY_LIST
 struct keys_info_node
 {
     struct keys_info_node *next; // 2 points, 16-byte
@@ -196,6 +203,7 @@ struct keys_info_node
     unsigned char keys_data[2]; // 2 char, 2-byte
 };
 struct keys_info_node key_info_head;
+#endif
 #endif
 
 static volatile unsigned char io_key_status;    // merged io key
@@ -908,8 +916,8 @@ void records_movement(void)
 
         if ( RecordFunc_key_times > 1200)   // 3 second
         {
-            records_flag = 3;               // records end  
-        }      
+            records_flag = 3;               // records end
+        }
     }
 
     if (((gpio_read(IO_PORTC_05)) == 1))    // 松开按键
@@ -921,20 +929,58 @@ void records_movement(void)
             if(records_movement_key)
                 if ((tcc_count % (400 / MAIN_TCC_TIMER)) == 0)
                     printf("---- recording ----");
+
+            if(data_send_to_host_temp[2] == data_send_to_host[2] && data_send_to_host_temp[3] == data_send_to_host[3])
+            {
+                (*((unsigned short*)records_keys_point + 1 + (2 * records_length) ))++;  //  记录持续时间, record duration
+            }
+            else
+            {
+                unsigned char temp = records_length;
+                if(records_length < RECORD_ARRAY_LEN)
+                    records_length++;
+                *((unsigned char*)records_keys_point + (4 * records_length) ) = data_send_to_host[2],
+                *((unsigned char*)records_keys_point + 1 + (4 * records_length) ) = data_send_to_host[3],
+                (*((unsigned short*)records_keys_point + 1 + (2 * records_length) ))++;  //  记录持续时间, record duration
+                if(records_length != temp)
+                {
+                    printf("%x\n%x", *((unsigned char*)records_keys_point + (4 * records_length) ), *((unsigned char*)records_keys_point + 1 + (4 * records_length) ));
+                }
+            }
         }
         break;
         case 3:
         {
             printf("---- record end ----");
-            records_flag = 0;
+            records_flag = 0;           // records ready
+
         }
         break;
         case 0:
         {
             if ((tcc_count % (400 / MAIN_TCC_TIMER)) == 0)
                 printf("---- record ready ----");
-            records_movement_key = 0;   // 按键按下记录清零 
+            records_movement_key = 0;   // 按键按下记录清零
             RecordFunc_key_times = 0;   // 按键按下时长清零, 在此处清零, 确保长时间按下不会重复触发case 1
+
+            for(;reappear_record < records_length;)
+            {
+                data_send_to_host[2] =  *((unsigned char*)records_keys_point + (4 * reappear_record) );
+                data_send_to_host[3] =  *((unsigned char*)records_keys_point + 1 + (4 * reappear_record) );
+                if( (*((unsigned short*)records_keys_point + 1 + (2 * reappear_record)) )-- != 0)
+                {
+                    break;
+                }
+                else
+                {
+                    reappear_record++;
+                }
+            }
+            if(!(reappear_record < records_length))
+            {
+                reappear_record = 0;
+                records_length = 0;
+            }
         }
         break;
         default:
@@ -963,8 +1009,8 @@ void *my_task(void *p_arg)
             left_read_rocker();
             right_read_rocker();
             read_trigger_value();
-            send_data_to_host();
             records_movement();
+            send_data_to_host();
         }
         break;
         case BREATHE_LED_TASK:
@@ -1252,11 +1298,13 @@ void my_task_init(void)
     data_send_to_host[1] = 0x14;
 
 #if RECORD_MOVEMENT
+#if MY_LIST
     /* 初始化头节点, init node head */
     key_info_head.keys_data[0] = 0;
     key_info_head.keys_data[1] = 0;
     key_info_head.record_times = 0;
     my_node_init(key_info_head);
+#endif
 #endif
 
 #if THREAD_CREATE
