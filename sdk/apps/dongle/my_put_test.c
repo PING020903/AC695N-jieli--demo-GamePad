@@ -171,6 +171,7 @@ static unsigned char successive_press_keys[12] = {0x00}; // 使能连点按键, 
 #endif
 
 #if RECORD_MOVEMENT
+#define ONCE_MAX_RECORD_TIMES   (0xfffd)
 static unsigned char records_movement_key;       // 记录键被按下, 开始记录
 static unsigned char records_flag = 0;           // records ready
 static unsigned short RecordFunc_key_times = 0;  // 记录该功能按键按下时间
@@ -179,8 +180,9 @@ static volatile unsigned short record_times = 0; // 宏记录时长, Max time is
 #define CHAR_SIZE_NEXT (4)
 #define SHORT_SIZE_NEXT (2)
 #define RECORD_ARRAY_LEN (24)
-static unsigned char reappear_record = 0;
-static unsigned char records_length = 0;
+static unsigned char reappear_record = 0;       // 复现按键当前状态记录
+static unsigned char records_length = 0;        // 记录长度( 参与计算 )
+static unsigned char records_length_temp = 0;   // 临时记录长度( 不参与计算 )
 static unsigned short reappear_times_temp[RECORD_ARRAY_LEN] = {0x00}; // 临时时间记录
 static unsigned int records_keys[RECORD_ARRAY_LEN] = {0x00}; // 记录键值与时间
 static unsigned int *records_keys_point = &records_keys;     // 第一次:  *((unsigned char*)records_keys_point + (4 * 0) ) = data_send_to_host[2],
@@ -337,12 +339,19 @@ void my_read_key(void)
 #endif
 
 #if SUCCESSIVE_PRESS
+    unsigned char IO_press = 0;
+    if( L_rocker_io_key || R_rocker_io_key  || L_1_io_key   || R_1_io_key   || 
+        my_key_val_1    || my_key_val_2     || my_key_val_3 || my_key_val_4 || 
+        a_key_val       || b_key_val        || x_key_val    || y_key_val)   // 支持先按功能键不松开, 再按普通按键
+    {
+        IO_press = 1;
+    }
     if ((gpio_read(IO_PORTC_03)) ^ 0x01)
     {
         successive_flag = 0;
         successive_press_key = (gpio_read(IO_PORTC_03)) ^ 0x01; // 就这样, 别动
     }
-    if (((gpio_read(IO_PORTC_03)) == 1) && (successive_flag == 0))
+    if (((gpio_read(IO_PORTC_03)) == 1) && (successive_flag == 0))  // 功能按键松开触发连点功能
     {
         if (my_key_val_1 && successive_press_key)
         {
@@ -408,7 +417,7 @@ void my_read_key(void)
             break;
     }
 
-    if (successive_press_status)
+    if (successive_press_status || IO_press)
     {
         unsigned int frequency = 8; // Hz
         if (my_key_val_1 && successive_press_keys[0] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)))
@@ -985,9 +994,13 @@ void records_movement(void)
         records_flag = 1;       // records start
         records_movement_key = (gpio_read(IO_PORTC_05)) ^ 0x01;
 
-        if (RecordFunc_key_times > 800) // 3 second
+        if (RecordFunc_key_times > 750 && RecordFunc_key_times < 1250) // 3~5 second
         {
-            records_flag = 3; // records end
+            records_flag = 3;   // records end
+        }
+        if(RecordFunc_key_times > 1250) // >5 second
+        {
+            records_flag = 5;   // reappear record
         }
     }
 
@@ -1004,10 +1017,13 @@ void records_movement(void)
             if (data_send_to_host_temp[2] == data_send_to_host[2] && data_send_to_host_temp[3] == data_send_to_host[3])
             {
                 (*((unsigned short *)records_keys_point + 1 + (2 * records_length)))++; //  记录持续时间, record duration
+                if((*((unsigned short *)records_keys_point + 1 + (2 * records_length))) == ONCE_MAX_RECORD_TIMES)  // 超出单次按键时间最大记录, 长度+1
+                    goto length_add;
                 reappear_times_temp[records_length] = (*((unsigned short *)records_keys_point + 1 + (2 * records_length))); // 给临时时间记录赋值
             }
             else
             {
+                length_add:
                 unsigned char temp = records_length;
                 if (records_length < RECORD_ARRAY_LEN)
                     records_length++;
@@ -1024,38 +1040,51 @@ void records_movement(void)
         case 3:
         {
             printf("---- record end ----");
-            records_flag = 0; // records ready
+            records_flag = 0;                       // records ready
+            records_length_temp = records_length;   // 该临时变量不用作计数, 用作比较
         }
         break;
         case 0:
         {
             if ((tcc_count % (800 / MAIN_TCC_TIMER)) == 0)
-                printf("---- record ready ----");
+            {
+                printf("---- record ready ---- \n data_time[0]: %x, data_time[1]: %x", reappear_times_temp[0], reappear_times_temp[1]);
+            }
+                
             records_movement_key = 0; // 按键按下记录清零
-            RecordFunc_key_times = 0; // 按键按下时长清零, 在此处清零, 确保长时间按下不会重复触发case 1
-
-            for (; reappear_record < records_length;)
+            RecordFunc_key_times = 0; // 按键按下时长清零, 在此处清零, 确保长时间按下不会重复触发case 1, case 3 
+        }
+        break;
+        case 5:
+        {
+            if ((tcc_count % (800 / MAIN_TCC_TIMER)) == 0)
+            {
+                printf("---- reappear record ---- ");
+            }
+            for (; reappear_record < records_length_temp;)
             {
                 data_send_to_host[2] = *((unsigned char *)records_keys_point + (4 * reappear_record));      // 赋键值
                 data_send_to_host[3] = *((unsigned char *)records_keys_point + 1 + (4 * reappear_record));
-                if (reappear_times_temp[reappear_record]-- != 0)
+                if (reappear_times_temp[reappear_record]-- != 0 && reappear_times_temp[reappear_record] < ONCE_MAX_RECORD_TIMES)
                     break;
                 else
-                    reappear_record++;
+                    reappear_record++;  // 下一次按键状态
             }
-            if (!(reappear_record < records_length) &&  
-            reappear_times_temp[reappear_record - 1] !=  (*((unsigned short *)records_keys_point + 1 + (2 * records_length))) )    //  计数完毕进入此判断
+            
+            if (!(reappear_record < records_length_temp) &&  
+            (reappear_record != 0 || records_length != 0) &&
+            reappear_times_temp[records_length_temp - 1] == 0xffff)    //  计数完毕进入此判断
             {
-                //printf("---- !(reappear_record < records_length) ----");
+                printf("---- !(reappear_record < records_length) ----");
                 for(int i = 0; i < records_length; i++)
                 {
                     reappear_times_temp[i] = (*((unsigned short *)records_keys_point + 1 + (2 * i)));
                 }
                 reappear_record = 0;
-                records_length = 0;
+                records_length = 0;     // 记录长度在执行一次后要清零?  导致只能执行一次
+                records_flag = 0;
             }
         }
-        break;
         default:
             break;
         }
