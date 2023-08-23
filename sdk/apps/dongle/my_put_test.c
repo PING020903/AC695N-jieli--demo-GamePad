@@ -58,6 +58,7 @@
 #define MY_LIST             0   // 用不了malloc(), 转用planA: 数组, (planB: 链表)我用不了
 #define MY_ARRAY            1   // 记录一定时间内的键值( 数组方式存储 )
 /***********************************************/
+
 #if FUNC_TIMESTAMP
 
 /*  以一种很粗糙的方式去判断函数的执行时间
@@ -1009,7 +1010,7 @@ void records_movement(void)
         
         switch (records_flag)
         {
-        case 1:
+        case 1: /* record */
         {
             ban_flag = 1;
             if (records_movement_key)
@@ -1027,8 +1028,14 @@ void records_movement(void)
             {
                 length_add:
                 unsigned char temp = records_length;
-                if (records_length < RECORD_ARRAY_LEN)
+                if (records_length < RECORD_ARRAY_LEN)  // 记录溢出前
                     records_length++;
+                else    // 记录溢出时
+                {
+                    printf("Error ! ! !  Record overflow ! \nRecords have been saved...");
+                    records_flag = 3;
+                    break;
+                }
                 *((unsigned char *)records_keys_point + (4 * records_length)) = data_send_to_host[2],
                 *((unsigned char *)records_keys_point + 1 + (4 * records_length)) = data_send_to_host[3],
                 (*((unsigned short *)records_keys_point + 1 + (2 * records_length)))++; //  记录持续时间, record duration
@@ -1040,15 +1047,16 @@ void records_movement(void)
             
         }
         break;
-        case 3:
+        case 3: /* record end */
         {
             printf("---- record end ----");
-            ban_flag = 0;
             records_flag = 0;                       // records ready
             records_length_temp = records_length;   // 该临时变量不用作计数, 用作比较
+            if(ban_flag && records_length_temp)     // 有过记录才运行该标志位置0, 放行case 5
+                ban_flag = 0;
         }
         break;
-        case 0:
+        case 0: /* record ready */
         {
             if ((tcc_count % (800 / MAIN_TCC_TIMER)) == 0)
             {
@@ -1060,11 +1068,23 @@ void records_movement(void)
             records_length = 0;         // 初始化记录长度
         }
         break;
-        case 5:
+        case 5: /* reappear record */
         {
             if(ban_flag == 1)
             {
                 records_flag = 3;   // 先跳转到结束(case 3)
+                break;
+            }
+            if((records_length_temp - 1) == 0xffffffff && reappear_times_temp[records_length_temp] == 0) // 尚未有过历史记录
+            {
+                printf(" WARNING !  >>> No history record !");
+                records_flag = 0;
+                break;
+            }
+            if(!records_length_temp)    // 若该变量被提前清零, 但记录是有数据的
+            {
+                printf(" WARNING ! >>> Record cleared !");
+                records_flag = 0;
                 break;
             }
             if ((tcc_count % (800 / MAIN_TCC_TIMER)) == 0)
@@ -1073,12 +1093,7 @@ void records_movement(void)
 reappear: [ %d ], record_len_temp: [ %d ], OcneTime: [ %d ]", 
 records_length_temp - 1, reappear_times_temp[records_length_temp], reappear_record, records_length_temp, (*((unsigned short *)records_keys_point + 1 + (2 * 0))));
             }
-            if((records_length_temp - 1) == 0xffffffff && reappear_times_temp[records_length_temp] == 0) // 尚未有过历史记录
-            {
-                printf(" WARNING !  >>> No history record !");
-                records_flag = 0;
-                break;
-            }
+
 
             for (; reappear_record < records_length_temp;)
             {
