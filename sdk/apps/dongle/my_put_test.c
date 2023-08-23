@@ -179,11 +179,12 @@ static volatile unsigned short record_times = 0; // 宏记录时长, Max time is
 #if MY_ARRAY
 #define CHAR_SIZE_NEXT (4)
 #define SHORT_SIZE_NEXT (2)
-#define RECORD_ARRAY_LEN (24)
-static volatile unsigned char ban_flag = 0;              // 不能直接记录(case 1)后跳转到播放记录(case 5)
-static volatile unsigned char reappear_record = 0;       // 复现按键当前状态记录
-static volatile unsigned char records_length = 0;        // 记录长度( 参与计算 )
-static volatile unsigned char records_length_temp = 0;   // 临时记录长度( 不参与计算 )
+#define RECORD_ARRAY_LEN (48)
+static int record_player_led;                            // player LED IO
+static unsigned char ban_flag = 0;              // 不能直接记录(case 1)后跳转到播放记录(case 5)
+static unsigned char reappear_record = 0;       // 复现按键当前状态记录
+static unsigned char records_length = 0;        // 记录长度( 参与计算 )
+static unsigned char records_length_temp = 0;   // 临时记录长度( 不参与计算 )
 static unsigned short reappear_times_temp[RECORD_ARRAY_LEN] = {0x00}; // 临时时间记录
 static unsigned int records_keys[RECORD_ARRAY_LEN] = {0x00}; // 记录键值与时间
 static unsigned int *records_keys_point = &records_keys;     // 第一次:  *((unsigned char*)records_keys_point + (4 * 0) ) = data_send_to_host[2],
@@ -940,6 +941,9 @@ void connect_flicker(void)
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_03, (int)player_IO_status);
             printf("____---- %s ----____\n", __func__);
+#if RECORD_MOVEMENT
+            record_player_led = IO_PORTA_03;
+#endif
         }
     }
     break;
@@ -949,6 +953,9 @@ void connect_flicker(void)
         {
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_02, (int)player_IO_status);
+#if RECORD_MOVEMENT
+            record_player_led = IO_PORTA_02;
+#endif
         }
     }
     break;
@@ -958,6 +965,9 @@ void connect_flicker(void)
         {
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_01, (int)player_IO_status);
+#if RECORD_MOVEMENT
+            record_player_led = IO_PORTA_01;
+#endif
         }
     }
     break;
@@ -967,6 +977,9 @@ void connect_flicker(void)
         {
             player_IO_status ^= 1;
             gpio_direction_output(IO_PORTA_04, (int)player_IO_status);
+#if RECORD_MOVEMENT
+            record_player_led = IO_PORTA_04;
+#endif
         }
     }
     break;
@@ -998,16 +1011,18 @@ void records_movement(void)
         if (RecordFunc_key_times > 750 && RecordFunc_key_times < 1250) // 3~5 second
         {
             records_flag = 3;   // records end
+            mcpwm_set_duty(pwm_ch0, pwm_timer0, (750 * 7));
         }
         if(RecordFunc_key_times > 1250) // >5 second
         {
             records_flag = 5;   // reappear record
+            mcpwm_set_duty(pwm_ch0, pwm_timer0, (1250 * 6));
         }
     }
 
     if (((gpio_read(IO_PORTC_05)) == 1)) // 松开按键
     {
-        
+        mcpwm_set_duty(pwm_ch0, pwm_timer0, 0);
         switch (records_flag)
         {
         case 1: /* record */
@@ -1016,6 +1031,13 @@ void records_movement(void)
             if (records_movement_key)
                 if ((tcc_count % (800 / MAIN_TCC_TIMER)) == 0)
                     printf("---- recording ----");
+
+            if((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)   // 闪烁指示灯, 表明状态
+            {
+                player_IO_status ^= 1;
+                gpio_direction_output(record_player_led, (int)player_IO_status);
+            }
+            
 
             if (data_send_to_host_temp[2] == data_send_to_host[2] && data_send_to_host_temp[3] == data_send_to_host[3])
             {
@@ -1050,6 +1072,7 @@ void records_movement(void)
         case 3: /* record end */
         {
             printf("---- record end ----");
+            gpio_direction_output(record_player_led, 1);    // 结束记录状态指示灯常亮
             records_flag = 0;                       // records ready
             records_length_temp = records_length;   // 该临时变量不用作计数, 用作比较
             if(ban_flag && records_length_temp)     // 有过记录才运行该标志位置0, 放行case 5
@@ -1072,6 +1095,7 @@ void records_movement(void)
         {
             if(ban_flag == 1)
             {
+                printf(" WARNING !  >>> Record end !");
                 records_flag = 3;   // 先跳转到结束(case 3)
                 break;
             }
@@ -1083,7 +1107,7 @@ void records_movement(void)
             }
             if(!records_length_temp)    // 若该变量被提前清零, 但记录是有数据的
             {
-                printf(" WARNING ! >>> Record cleared !");
+                printf(" WARNING !  >>> Record cleared !");
                 records_flag = 0;
                 break;
             }
