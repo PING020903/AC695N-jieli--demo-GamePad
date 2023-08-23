@@ -23,42 +23,41 @@
 #include "asm/mcpwm.h"
 
 /**************define-switch, 宏开关**************/
-#define READ_KEY 1
-#define MERGE_KEY 1
-#define MOVEMENTS_SEND 1
+#define READ_KEY            1   // 读按键
+#define MERGE_KEY           1   // 合并键值
+#define MOVEMENTS_SEND      1   // 键值变动发送
 
-#define TRIGGER 1
-#define LEFT_TRIGGER 1
-#define RIGHT_TRIGGER 1
-#define PWM_MOTOR 1
-#define LEFT_MOTOR 1
-#define RIGHT_MOTOR 1
+#define TRIGGER             1   // 扳机
+#define LEFT_TRIGGER        1   // 左扳机
+#define RIGHT_TRIGGER       1   // 右扳机
+#define PWM_MOTOR           1   // PWM马达震动
+#define LEFT_MOTOR          1   // 左马达
+#define RIGHT_MOTOR         1   // 右马达
 
-#define LEFT_ROCKER 1
-#define LEFT_ROCKER_BUFFER 1
-#define LEFT_ROCKER_X_AXIS 1
-#define LEFT_ROCKER_Y_AXIS 1
+#define LEFT_ROCKER         1   // 左摇杆
+#define LEFT_ROCKER_BUFFER  1   // 左摇杆缓冲区
+#define LEFT_ROCKER_X_AXIS  1   // 左摇杆X轴
+#define LEFT_ROCKER_Y_AXIS  1   // 左摇杆Y轴
 
-#define RIGHT_ROCKER 1
-#define RIGHT_ROCKER_BUFFER 1
-#define RIGHT_ROCKER_X_AXIS 1
-#define RIGHT_ROCKER_Y_AXIS 1
+#define RIGHT_ROCKER        1   // 右摇杆
+#define RIGHT_ROCKER_BUFFER 1   // 右摇杆缓冲区
+#define RIGHT_ROCKER_X_AXIS 1   // 右摇杆X轴
+#define RIGHT_ROCKER_Y_AXIS 1   // 右摇杆Y轴
 
-#define SUCCESSIVE_PRESS 1
+#define SUCCESSIVE_PRESS    1   // 连点功能
 
-#define FUNC_TIMESTAMP 0
+#define FUNC_TIMESTAMP      0   // 粗略测量函数执行时间
 
-#define THREAD_CREATE 1
-#define MAIN_TIMER 1
-#define PWM_TIEMR 1
-#define SPECIAL_FUNC_TIMER 0
-#define MY_PRINTF 0
+#define THREAD_CREATE       1   // 线程创建
+#define MAIN_TIMER          1   // 主要定时器
+#define PWM_TIEMR           1   // PWM定时器
+#define SPECIAL_FUNC_TIMER  0   // 特殊功能定时器
+#define MY_PRINTF           0   // 我的打印
 
-#define RECORD_MOVEMENT 1
-#define MY_LIST 0 // 用不了malloc(), 转用planA: 数组, (planB: 链表)我用不了
-#define MY_ARRAY 1
+#define RECORD_MOVEMENT     1   // 功能: 记录一定时间内的键值
+#define MY_LIST             0   // 用不了malloc(), 转用planA: 数组, (planB: 链表)我用不了
+#define MY_ARRAY            1   // 记录一定时间内的键值( 数组方式存储 )
 /***********************************************/
-
 #if FUNC_TIMESTAMP
 
 /*  以一种很粗糙的方式去判断函数的执行时间
