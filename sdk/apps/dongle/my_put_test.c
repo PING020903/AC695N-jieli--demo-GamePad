@@ -179,14 +179,16 @@ static volatile unsigned short record_times = 0; // 宏记录时长, Max time is
 #if MY_ARRAY
 #define CHAR_SIZE_NEXT (4)
 #define SHORT_SIZE_NEXT (2)
-#define RECORD_ARRAY_LEN (48)
-static int record_player_led;                            // player LED IO
+#define MAX_RECORD_ARRAY_LEN (16)                // "记录"最大长度
+static int record_player_led;                   // player LED IO
+static unsigned short PWM_temp;                 // 怀疑是进入PWM占空比设置函数消耗了太多的时间
+static unsigned char time_flag = 1;             // 每次记录前都要记得将时间清零
 static unsigned char ban_flag = 0;              // 不能直接记录(case 1)后跳转到播放记录(case 5)
 static unsigned char reappear_record = 0;       // 复现按键当前状态记录
 static unsigned char records_length = 0;        // 记录长度( 参与计算 )
 static unsigned char records_length_temp = 0;   // 临时记录长度( 不参与计算 )
-static unsigned short reappear_times_temp[RECORD_ARRAY_LEN] = {0x00}; // 临时时间记录
-static unsigned int records_keys[RECORD_ARRAY_LEN] = {0x00}; // 记录键值与时间
+static unsigned short reappear_times_temp[MAX_RECORD_ARRAY_LEN] = {0x00}; // 临时时间记录
+static unsigned int records_keys[MAX_RECORD_ARRAY_LEN] = {0x00}; // 记录键值与时间
 static unsigned int *records_keys_point = &records_keys;     // 第一次:  *((unsigned char*)records_keys_point + (4 * 0) ) = data_send_to_host[2],
                                                              //          *((unsigned char*)records_keys_point + 1 + (4 * 0) ) = data_send_to_host[3],
                                                              //          *((unsigned short*)records_keys_point + 1 + (2 * 0) ) = time;  //  记录持续时间, record duration
@@ -198,6 +200,10 @@ static unsigned int *records_keys_point = &records_keys;     // 第一次:  *((u
                                                              // 下下次:  *((unsigned char*)records_keys_point + (4 * 2)) = data_send_to_host[2],
                                                              //          *((unsigned char*)records_keys_point + 1 + (4 * 2)) = data_send_to_host[3],
                                                              //          *((unsigned short*)records_keys_point + 1 + (2 * 2)) = time;
+/* a 'int' type of size */
+/* 0000 0000 0000 0000 0000 0000 0000 0000 */
+/* _________ _________ ___________________ */
+/* Key value Key value    Times record     */
 #endif
 #if MY_LIST
 struct keys_info_node
@@ -999,47 +1005,63 @@ void records_movement(void)
 #if RECORD_MOVEMENT
     
     if ((tcc_count % (1000 / MAIN_TCC_TIMER)) == 0)
-        printf("---- %s ---- %d --- %d ---", __func__, records_flag, records_movement_key);
+        printf("---- %s ---- %d ---- ", __func__, records_flag/* , records_movement_key */);
 
 
     if ((gpio_read(IO_PORTC_05)) ^ 0x01)
     {
         RecordFunc_key_times++; // add seconds
         records_flag = 1;       // records start
-        records_movement_key = (gpio_read(IO_PORTC_05)) ^ 0x01;
+        //records_movement_key = (gpio_read(IO_PORTC_05)) ^ 0x01;
 
         if (RecordFunc_key_times > 750 && RecordFunc_key_times < 1250) // 3~5 second
         {
             records_flag = 3;   // records end
-            mcpwm_set_duty(pwm_ch0, pwm_timer0, (750 * 7));
+            PWM_temp = 750 * 7;
+            mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
         }
         if(RecordFunc_key_times > 1250) // >5 second
         {
             records_flag = 5;   // reappear record
-            mcpwm_set_duty(pwm_ch0, pwm_timer0, (1250 * 6));
+            PWM_temp = 1250 * 6;
+            mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
         }
+        gpio_direction_output(IO_PORTC_02, 0);
+        gpio_direction_output(IO_PORTC_04, 0);
     }
 
     if (((gpio_read(IO_PORTC_05)) == 1)) // 松开按键
     {
-        mcpwm_set_duty(pwm_ch0, pwm_timer0, 0);
+        if(PWM_temp)
+        {
+            PWM_temp = 0;
+            mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
+        }
+            
         switch (records_flag)
         {
         case 1: /* record */
         {
+            gpio_direction_output(IO_PORTC_02, 1);
             ban_flag = 1;
             if (records_movement_key)
-                if ((tcc_count % (800 / MAIN_TCC_TIMER)) == 0)
+                if ((tcc_count % (2000 / MAIN_TCC_TIMER)) == 0)
                     printf("---- recording ----");
 
-            if((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)   // 闪烁指示灯, 表明状态
+            if((tcc_count % (800 / MAIN_TCC_TIMER)) == 0)   // 闪烁指示灯, 表明状态
             {
                 player_IO_status ^= 1;
                 gpio_direction_output(record_player_led, (int)player_IO_status);
             }
-            
+            if( time_flag ) // 时间标志与存储时间的变量不为零, 需要清零
+            {
+                for(int i = 0; i < records_length_temp; i++)
+                    (*((unsigned short *)records_keys_point + 1 + (2 * i))) = 0;
+                time_flag = 0;
+                printf("clear times");
+            }
 
-            if (data_send_to_host_temp[2] == data_send_to_host[2] && data_send_to_host_temp[3] == data_send_to_host[3])
+            if (data_send_to_host_temp[2] == data_send_to_host[2] && data_send_to_host_temp[3] == data_send_to_host[3] && time_flag == 0)
             {
                 (*((unsigned short *)records_keys_point + 1 + (2 * records_length)))++; //  记录持续时间, record duration
                 if((*((unsigned short *)records_keys_point + 1 + (2 * records_length))) == ONCE_MAX_RECORD_TIMES)  // 超出单次按键时间最大记录, 长度+1
@@ -1050,7 +1072,7 @@ void records_movement(void)
             {
                 length_add:
                 unsigned char temp = records_length;
-                if (records_length < RECORD_ARRAY_LEN)  // 记录溢出前
+                if (records_length < MAX_RECORD_ARRAY_LEN)  // 记录溢出前
                     records_length++;
                 else    // 记录溢出时
                 {
@@ -1058,12 +1080,13 @@ void records_movement(void)
                     records_flag = 3;
                     break;
                 }
-                *((unsigned char *)records_keys_point + (4 * records_length)) = data_send_to_host[2],
-                *((unsigned char *)records_keys_point + 1 + (4 * records_length)) = data_send_to_host[3],
-                (*((unsigned short *)records_keys_point + 1 + (2 * records_length)))++; //  记录持续时间, record duration
+                *((unsigned char *)records_keys_point + (CHAR_SIZE_NEXT * records_length)) = data_send_to_host[2],
+                *((unsigned char *)records_keys_point + 1 + (CHAR_SIZE_NEXT * records_length)) = data_send_to_host[3],
+                (*((unsigned short *)records_keys_point + 1 + (SHORT_SIZE_NEXT * records_length)))++; //  记录持续时间, record duration
                 if (records_length != temp)
                 {
-                    printf("%x\n%x", *((unsigned char *)records_keys_point + (4 * records_length)), *((unsigned char *)records_keys_point + 1 + (4 * records_length)));
+                    printf("%x\n%x", *((unsigned char *)records_keys_point + (CHAR_SIZE_NEXT * records_length)), 
+                    *((unsigned char *)records_keys_point + 1 + (CHAR_SIZE_NEXT * records_length)));
                 }
             }
             
@@ -1072,27 +1095,43 @@ void records_movement(void)
         case 3: /* record end */
         {
             printf("---- record end ----");
+            gpio_direction_output(IO_PORTC_02, 0);
+            gpio_direction_output(IO_PORTC_04, 0);
             gpio_direction_output(record_player_led, 1);    // 结束记录状态指示灯常亮
             records_flag = 0;                       // records ready
             records_length_temp = records_length;   // 该临时变量不用作计数, 用作比较
-            if(ban_flag && records_length_temp)     // 有过记录才运行该标志位置0, 放行case 5
+            if(ban_flag)     // 有过记录才运行该标志位置0, 放行case 5
                 ban_flag = 0;
+            
         }
         break;
         case 0: /* record ready */
         {
-            if ((tcc_count % (800 / MAIN_TCC_TIMER)) == 0)
+            if ((tcc_count % (1000 / MAIN_TCC_TIMER)) == 0)
             {
                 printf("---- record ready ---- \n");
             }
 
-            records_movement_key = 0;   // 按键按下记录清零
+            //records_movement_key = 0;   // 按键按下记录清零
+            gpio_direction_output(IO_PORTC_02, 0);
+            gpio_direction_output(IO_PORTC_04, 0);
             RecordFunc_key_times = 0;   // 按键按下时长清零, 在此处清零, 确保长时间按下不会重复触发case 1, case 3
             records_length = 0;         // 初始化记录长度
+            if(!time_flag)
+                time_flag = 1;
         }
         break;
         case 5: /* reappear record */
         {
+            if ((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)
+            {
+                printf("---- reappear record ---- ");
+                /* 
+                printf("(RecordsLengthTemp-1): [ %d ], ReappearTimes: [ %x ]\n reappear: [ %d ], record_len_temp: [ %d ], OcneTime: [ %d ]", 
+                records_length_temp - 1, reappear_times_temp[records_length_temp], reappear_record, records_length_temp, 
+                (*((unsigned short *)records_keys_point + 1 + (SHORT_SIZE_NEXT * 0)))); 
+                */
+            }
             if(ban_flag == 1)
             {
                 printf(" WARNING !  >>> Record end !");
@@ -1111,18 +1150,13 @@ void records_movement(void)
                 records_flag = 0;
                 break;
             }
-            if ((tcc_count % (800 / MAIN_TCC_TIMER)) == 0)
-            {
-                printf("---- reappear record ---- (RecordsLengthTemp-1): [ %d ], ReappearTimes: [ %x ]\n \
-reappear: [ %d ], record_len_temp: [ %d ], OcneTime: [ %d ]", 
-records_length_temp - 1, reappear_times_temp[records_length_temp], reappear_record, records_length_temp, (*((unsigned short *)records_keys_point + 1 + (2 * 0))));
-            }
-
-
+            
+/* keys value reappear */
+gpio_direction_output(IO_PORTC_04, 1);
             for (; reappear_record < records_length_temp;)
             {
-                data_send_to_host[2] = *((unsigned char *)records_keys_point + (4 * reappear_record));      // 赋键值
-                data_send_to_host[3] = *((unsigned char *)records_keys_point + 1 + (4 * reappear_record));
+                data_send_to_host[2] = *((unsigned char *)records_keys_point + (CHAR_SIZE_NEXT * reappear_record));      // 赋键值
+                data_send_to_host[3] = *((unsigned char *)records_keys_point + 1 + (CHAR_SIZE_NEXT * reappear_record));
                 if (reappear_times_temp[reappear_record]-- != 0 && reappear_times_temp[reappear_record] < ONCE_MAX_RECORD_TIMES)
                     break;
                 else
@@ -1134,7 +1168,7 @@ records_length_temp - 1, reappear_times_temp[records_length_temp], reappear_reco
                 printf("---- !(reappear_record < records_length_temp) ---- %d < %d ", reappear_record, records_length_temp);
                 for(int i = 0; i < records_length_temp; i++)
                 {
-                    reappear_times_temp[i] = (*((unsigned short *)records_keys_point + 1 + (2 * i)));
+                    reappear_times_temp[i] = (*((unsigned short *)records_keys_point + 1 + (SHORT_SIZE_NEXT * i)));
                 }
                 reappear_record = 0;
                 records_flag = 0;
@@ -1164,16 +1198,16 @@ void *my_task(void *p_arg)
         case MAIN_TCC_TASK:
         {
             my_read_key();
+            records_movement();
             left_read_rocker();
             right_read_rocker();
             read_trigger_value();
-            records_movement();
             send_data_to_host();
         }
         break;
         case BREATHE_LED_TASK:
         {
-            my_led_function();
+             my_led_function();
             if (player_flicker_time == 1 && player_IO_status == 1)
                 break;
             connect_flicker();
@@ -1203,6 +1237,9 @@ void my_button_init(void)
     gpio_set_direction(IO_PORTA_04, 0); /* LED3 */
     gpio_set_direction(IO_PORTA_01, 0); /* LED0 */
     gpio_set_direction(IO_PORTA_03, 0); /* LED2 */
+
+    gpio_set_direction(IO_PORTC_02, 0); /* debug times */
+    gpio_set_direction(IO_PORTC_04, 0); /* debug times */
 
     /* set IO input */
     gpio_set_direction(IO_PORTA_05, 1); // ADC, rocker L_X
