@@ -179,9 +179,9 @@ static volatile unsigned short record_times = 0; // 宏记录时长, Max time is
 #if MY_ARRAY
 #define CHAR_SIZE_NEXT (4)
 #define SHORT_SIZE_NEXT (2)
-#define MAX_RECORD_ARRAY_LEN (16)                // "记录"最大长度
+#define MAX_RECORD_ARRAY_LEN (16)               // "记录"最大长度
 static int record_player_led;                   // player LED IO
-static unsigned short PWM_temp;                 // 怀疑是进入PWM占空比设置函数消耗了太多的时间
+static unsigned short PWM_temp;                 // 减少进入PWM占空比设置函数
 static unsigned char time_flag = 1;             // 每次记录前都要记得将时间清零
 static unsigned char ban_flag = 0;              // 不能直接记录(case 1)后跳转到播放记录(case 5)
 static unsigned char reappear_record = 0;       // 复现按键当前状态记录
@@ -1026,8 +1026,6 @@ void records_movement(void)
             PWM_temp = 1250 * 6;
             mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
         }
-        gpio_direction_output(IO_PORTC_02, 0);
-        gpio_direction_output(IO_PORTC_04, 0);
     }
 
     if (((gpio_read(IO_PORTC_05)) == 1)) // 松开按键
@@ -1042,7 +1040,6 @@ void records_movement(void)
         {
         case 1: /* record */
         {
-            gpio_direction_output(IO_PORTC_02, 1);
             ban_flag = 1;
             if (records_movement_key)
                 if ((tcc_count % (2000 / MAIN_TCC_TIMER)) == 0)
@@ -1095,8 +1092,6 @@ void records_movement(void)
         case 3: /* record end */
         {
             printf("---- record end ----");
-            gpio_direction_output(IO_PORTC_02, 0);
-            gpio_direction_output(IO_PORTC_04, 0);
             gpio_direction_output(record_player_led, 1);    // 结束记录状态指示灯常亮
             records_flag = 0;                       // records ready
             records_length_temp = records_length;   // 该临时变量不用作计数, 用作比较
@@ -1113,8 +1108,6 @@ void records_movement(void)
             }
 
             //records_movement_key = 0;   // 按键按下记录清零
-            gpio_direction_output(IO_PORTC_02, 0);
-            gpio_direction_output(IO_PORTC_04, 0);
             RecordFunc_key_times = 0;   // 按键按下时长清零, 在此处清零, 确保长时间按下不会重复触发case 1, case 3
             records_length = 0;         // 初始化记录长度
             if(!time_flag)
@@ -1152,7 +1145,6 @@ void records_movement(void)
             }
             
 /* keys value reappear */
-gpio_direction_output(IO_PORTC_04, 1);
             for (; reappear_record < records_length_temp;)
             {
                 data_send_to_host[2] = *((unsigned char *)records_keys_point + (CHAR_SIZE_NEXT * reappear_record));      // 赋键值
