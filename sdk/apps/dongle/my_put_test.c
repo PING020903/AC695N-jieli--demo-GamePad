@@ -179,7 +179,7 @@ static volatile unsigned short record_times = 0; // 宏记录时长, Max time is
 #if MY_ARRAY
 #define CHAR_SIZE_NEXT (4)
 #define SHORT_SIZE_NEXT (2)
-#define MAX_RECORD_ARRAY_LEN (16)               // "记录"最大长度
+#define MAX_RECORD_ARRAY_LEN (128)               // "记录"最大长度
 static int record_player_led;                   // player LED IO
 static unsigned short PWM_temp;                 // 减少进入PWM占空比设置函数
 static unsigned char time_flag = 1;             // 每次记录前都要记得将时间清零
@@ -220,6 +220,7 @@ struct keys_info_node key_info_head;
 static volatile unsigned char io_key_status;    // merged io key
 static unsigned char motor_flag = 1;            // 清除初始化的占空比值 Clear the initialised duty cycle value
 static unsigned char player_IO_status = 1;      // 玩家led指示灯状态
+static unsigned char exit_flicker = 0;
 volatile unsigned char player_flicker_time = 0; // 玩家led指示灯闪烁时间
 
 #if MY_LIST
@@ -354,11 +355,12 @@ void my_read_key(void)
     {
         IO_press = 1;
     }
-    if ((gpio_read(IO_PORTC_03)) ^ 0x01)
+    if ((gpio_read(IO_PORTC_03)) ^ 0x01)    // 按下
     {
-        successive_press_key = (gpio_read(IO_PORTC_03)) ^ 0x01; // 按键已经按下
+        successive_press_key = (gpio_read(IO_PORTC_03)) ^ 0x01; // 已经按下
     }
-    if (((gpio_read(IO_PORTC_03)) == 1))  // 功能按键松开触发连点功能
+
+    if (((gpio_read(IO_PORTC_03)) == 1) )  // 功能按键松开
     {
         if (my_key_val_1 && successive_press_key)
         {
@@ -411,9 +413,10 @@ void my_read_key(void)
         {
             successive_press_keys[11] ^= 0X01;
         }
-        printf("in the (if), 1>%d, 2>%d, 3>%d, 4>%d, 5>%d, 6>%d, 7>%d, 8>%d, 9>%d, 10>%d, 11>%d, 12>%d, ", successive_press_keys[0], successive_press_keys[1],
+        successive_press_key = 0;
+        /* printf("in the (if), 1>%d, 2>%d, 3>%d, 4>%d, 5>%d, 6>%d, 7>%d, 8>%d, 9>%d, 10>%d, 11>%d, 12>%d, ", successive_press_keys[0], successive_press_keys[1],
                successive_press_keys[2], successive_press_keys[3], successive_press_keys[4], successive_press_keys[5], successive_press_keys[6], successive_press_keys[7],
-               successive_press_keys[8], successive_press_keys[9], successive_press_keys[10], successive_press_keys[11]);
+               successive_press_keys[8], successive_press_keys[9], successive_press_keys[10], successive_press_keys[11]); */
     }
 
     for (int i = 0; i < 12; i++)
@@ -935,7 +938,11 @@ void my_led_function(void)
 void connect_flicker(void)
 {
     if (player_flicker_time == 1 && player_IO_status == 1)
+    {
+        exit_flicker = 1;
         return;
+    }
+        
     switch (player_led)
     {
     case 1:
@@ -1001,16 +1008,11 @@ void connect_flicker(void)
 void records_movement(void)
 {
 #if RECORD_MOVEMENT
-    
-    if ((tcc_count % (1000 / MAIN_TCC_TIMER)) == 0)
-        printf("---- %s ---- %d ---- ", __func__, records_flag/* , records_movement_key */);
-
 
     if ((gpio_read(IO_PORTC_05)) ^ 0x01)
     {
         RecordFunc_key_times++; // add seconds
         records_flag = 1;       // records start
-        //records_movement_key = (gpio_read(IO_PORTC_05)) ^ 0x01;
 
         if (RecordFunc_key_times > 750 && RecordFunc_key_times < 1250) // 3~5 second
         {
@@ -1039,9 +1041,8 @@ void records_movement(void)
         case 1: /* record */
         {
             ban_flag = 1;
-            if (records_movement_key)
-                if ((tcc_count % (2000 / MAIN_TCC_TIMER)) == 0)
-                    printf("---- recording ----");
+            if ((tcc_count % (2000 / MAIN_TCC_TIMER)) == 0)
+                printf("---- recording ----");
 
             if((tcc_count % (800 / MAIN_TCC_TIMER)) == 0)   // 闪烁指示灯, 表明状态
             {
@@ -1100,12 +1101,7 @@ void records_movement(void)
         break;
         case 0: /* record ready */
         {
-            if ((tcc_count % (1000 / MAIN_TCC_TIMER)) == 0)
-            {
-                printf("---- record ready ---- \n");
-            }
-
-            //records_movement_key = 0;   // 按键按下记录清零
+            //player_flicker_time = 1;    // 避免上电闪灯与record指示灯闪灯冲突
             RecordFunc_key_times = 0;   // 按键按下时长清零, 在此处清零, 确保长时间按下不会重复触发case 1, case 3
             records_length = 0;         // 初始化记录长度
             if(!time_flag)
@@ -1114,15 +1110,6 @@ void records_movement(void)
         break;
         case 5: /* reappear record */
         {
-            if ((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)
-            {
-                printf("---- reappear record ---- ");
-                /* 
-                printf("(RecordsLengthTemp-1): [ %d ], ReappearTimes: [ %x ]\n reappear: [ %d ], record_len_temp: [ %d ], OcneTime: [ %d ]", 
-                records_length_temp - 1, reappear_times_temp[records_length_temp], reappear_record, records_length_temp, 
-                (*((unsigned short *)records_keys_point + 1 + (SHORT_SIZE_NEXT * 0)))); 
-                */
-            }
             if(ban_flag == 1)
             {
                 printf(" WARNING !  >>> Record end !");
@@ -1198,7 +1185,7 @@ void *my_task(void *p_arg)
         case BREATHE_LED_TASK:
         {
              my_led_function();
-            if (player_flicker_time == 1 && player_IO_status == 1)
+            if (exit_flicker)
                 break;
             connect_flicker();
         }
