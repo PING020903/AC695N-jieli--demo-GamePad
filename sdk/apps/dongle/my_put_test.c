@@ -356,10 +356,9 @@ void my_read_key(void)
     }
     if ((gpio_read(IO_PORTC_03)) ^ 0x01)
     {
-        successive_flag = 0;
-        successive_press_key = (gpio_read(IO_PORTC_03)) ^ 0x01; // 就这样, 别动
+        successive_press_key = (gpio_read(IO_PORTC_03)) ^ 0x01; // 按键已经按下
     }
-    if (((gpio_read(IO_PORTC_03)) == 1) && (successive_flag == 0))  // 功能按键松开触发连点功能
+    if (((gpio_read(IO_PORTC_03)) == 1))  // 功能按键松开触发连点功能
     {
         if (my_key_val_1 && successive_press_key)
         {
@@ -412,7 +411,6 @@ void my_read_key(void)
         {
             successive_press_keys[11] ^= 0X01;
         }
-        successive_flag = 1;
         printf("in the (if), 1>%d, 2>%d, 3>%d, 4>%d, 5>%d, 6>%d, 7>%d, 8>%d, 9>%d, 10>%d, 11>%d, 12>%d, ", successive_press_keys[0], successive_press_keys[1],
                successive_press_keys[2], successive_press_keys[3], successive_press_keys[4], successive_press_keys[5], successive_press_keys[6], successive_press_keys[7],
                successive_press_keys[8], successive_press_keys[9], successive_press_keys[10], successive_press_keys[11]);
