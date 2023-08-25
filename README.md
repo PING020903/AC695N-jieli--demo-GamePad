@@ -9,4 +9,7 @@
 若要添加.c文件进行编译，请修改你要添加.c文件的文件夹中的makefile    
 [![image](https://github.com/PING020903/AC695N-demo-xbox360-WindowsPC_only/assets/88314322/25880817-038e-4739-8898-3da2a77fad6b)]   
 如图中被选中的行，按照该格式，在该行下方添加自己的.c文件，编译时即可包含你自己所创建的.c文件    
-# 设备描述符与配置描述符在 descriptor.c, 接口描述符在 uac1.c, 配置描述符与接口描述符的拼接在 uar1.c 中，该配置描述符中的配置总长度会经过SDK中自行算出，初值赋值并不重要   
+# 设备描述符与配置描述符在 descriptor.c, 接口描述符在 uac1.c, 配置描述符与接口描述符的拼接在 uar1.c 中，该配置描述符中的配置总长度会经过SDK中自行算出，初值赋值并不重要  
+
+# 更多请阅读该路径下的详细代码逻辑描述
+> /sdk/Code_Logic_Description_CN.md
