@@ -160,14 +160,12 @@ static int trigger_value_R = 0;
 #endif /* PWM motor */
 
 #if SUCCESSIVE_PRESS
-#define SUCCESSIVE_TCC_TIMER (500)
 #define SUCCESSIVE_OF_CYCLICALITY(a) (250U / (unsigned int)a)
 #define SUCCESSIVE_OF_HALF_CYCLICALITY(a) ((250U / (unsigned int)a) / 2) // 1000ms / x(Hz) = CYCLICALITY_TIMES, 该半周期值是近似值
-static volatile unsigned char successive_press_key = 0;
 static unsigned char successive_press_status = 0;
-static unsigned char successive_flag = 1; // 标志位不要放在函数内
+static unsigned char general_keys[12] = {0x00};     // 记录普通按键是否曾按下
 static volatile unsigned char successive_IO_LOW_status_times = 0;
-static unsigned char successive_press_keys[12] = {0x00}; // 使能连点按键, 表示按键是否被使能连点
+static unsigned char successive_press_keys[12] = {0x00}; // 使能连点按键, 表示按键是否被使能连点, 0普通模式 | 1连发模式
 #endif
 
 #if RECORD_MOVEMENT
@@ -347,76 +345,182 @@ void my_read_key(void)
     // JL_PORTA->IN |= BIT(0);  // 输入选择
 #endif
 
-#if SUCCESSIVE_PRESS
-    unsigned char IO_press = 0;
-    if( L_rocker_io_key || R_rocker_io_key  || L_1_io_key   || R_1_io_key   ||
-        my_key_val_1    || my_key_val_2     || my_key_val_3 || my_key_val_4 ||
-        a_key_val       || b_key_val        || x_key_val    || y_key_val)   // 支持先按功能键不松开, 再按普通按键
-    {
-        IO_press = 1;
-    }
+#if 1
     if ((gpio_read(IO_PORTC_03)) ^ 0x01)    // 按下
     {
-        successive_press_key = (gpio_read(IO_PORTC_03)) ^ 0x01; // 已经按下
+       
     }
+#endif
 
-    if (((gpio_read(IO_PORTC_03)) == 1) )  // 功能按键松开
+
+#if SUCCESSIVE_PRESS
+
+    if ((gpio_read(IO_PORTC_03)) == 0)  // 功能按键按下
     {
-        if (my_key_val_1 && successive_press_key)
+        if(my_key_val_1)
         {
-            successive_press_keys[0] ^= 0X01;
+            if (!general_keys[0])
+            {
+                successive_press_keys[0] ^= 0X01;
+                general_keys[0] = 1;
+            }
         }
-        if (my_key_val_2 && successive_press_key)
+        else
         {
-            successive_press_keys[1] ^= 0X01;
-        }
-        if (my_key_val_3 && successive_press_key)
-        {
-            successive_press_keys[2] ^= 0X01;
-        }
-        if (my_key_val_4 && successive_press_key)
-        {
-            successive_press_keys[3] ^= 0X01;
+            general_keys[0] = 0;
         }
 
-        if (a_key_val && successive_press_key)
+        if (my_key_val_2)
         {
-            successive_press_keys[4] ^= 0X01;
+            if (!general_keys[1])
+            {
+                successive_press_keys[1] ^= 0X01;
+                general_keys[1] = 1;
+            }
         }
-        if (b_key_val && successive_press_key)
+        else
         {
-            successive_press_keys[5] ^= 0X01;
-        }
-        if (x_key_val && successive_press_key)
-        {
-            successive_press_keys[6] ^= 0X01;
-        }
-        if (y_key_val && successive_press_key)
-        {
-            successive_press_keys[7] ^= 0X01;
+            general_keys[1] = 0;
         }
 
-        if (L_1_io_key && successive_press_key)
+        if (my_key_val_3)
         {
-            successive_press_keys[8] ^= 0X01;
+            if (!general_keys[2])
+            {
+                successive_press_keys[2] ^= 0X01;
+                general_keys[2] = 1;
+            }
         }
-        if (R_1_io_key && successive_press_key)
+        else
         {
-            successive_press_keys[9] ^= 0X01;
+            general_keys[2] = 0;
         }
 
-        if (L_rocker_io_key && successive_press_key)
+        if (my_key_val_4)
         {
-            successive_press_keys[10] ^= 0X01;
+            if (!general_keys[3])
+            {
+                successive_press_keys[3] ^= 0X01;
+                general_keys[3] = 1;
+            }
         }
-        if (R_rocker_io_key && successive_press_key)
+        else
         {
-            successive_press_keys[11] ^= 0X01;
+            general_keys[3] = 0;
         }
-        successive_press_key = 0;
+
+        if (a_key_val)
+        {
+            if (!general_keys[4])
+            {
+                successive_press_keys[4] ^= 0X01;
+                general_keys[4] = 1;
+            }
+        }
+        else
+        {
+            general_keys[4] = 0;
+        }
+
+        if (b_key_val)
+        {
+            if (!general_keys[5])
+            {
+                successive_press_keys[5] ^= 0X01;
+                general_keys[5] = 1;
+            }
+        }
+        else
+        {
+            general_keys[5] = 0;
+        }
+
+        if(x_key_val)
+        {
+            if (!general_keys[6])
+            {
+                successive_press_keys[6] ^= 0X01;
+                general_keys[6] = 1;
+            }
+        }
+        else
+        {
+            general_keys[6] = 0;
+        }
+
+        if (y_key_val)
+        {
+            if (!general_keys[7])
+            {
+                successive_press_keys[7] ^= 0X01;
+                general_keys[7] = 1;
+            }
+        }
+        else
+        {
+            general_keys[7] = 0;
+        }
+
+        if (L_1_io_key)
+        {
+            if (!general_keys[8])
+            {
+                successive_press_keys[8] ^= 0X01;
+                general_keys[8] = 1;
+            }
+        }
+        else
+        {
+            general_keys[8] = 0;
+        }
+
+        if (R_1_io_key)
+        {
+            if (!general_keys[9])
+            {
+                successive_press_keys[9] ^= 0X01;
+                general_keys[9] = 1;
+            }
+        }
+        else
+        {
+            general_keys[9] = 0;
+        }
+
+        if (L_rocker_io_key)
+        {
+           if (!general_keys[10])
+            {
+                successive_press_keys[10] ^= 0X01;
+                general_keys[10] = 1;
+            }
+        }
+        else
+        {
+            general_keys[10] = 0;
+        }
+
+        if (R_rocker_io_key)
+        {
+            if (!general_keys[11])
+            {
+                successive_press_keys[11] ^= 0X01;
+                general_keys[11] = 1;
+            }
+        }
+        else
+        {
+            general_keys[11] = 0;
+        }
+
         /* printf("in the (if), 1>%d, 2>%d, 3>%d, 4>%d, 5>%d, 6>%d, 7>%d, 8>%d, 9>%d, 10>%d, 11>%d, 12>%d, ", successive_press_keys[0], successive_press_keys[1],
                successive_press_keys[2], successive_press_keys[3], successive_press_keys[4], successive_press_keys[5], successive_press_keys[6], successive_press_keys[7],
                successive_press_keys[8], successive_press_keys[9], successive_press_keys[10], successive_press_keys[11]); */
+    }
+    else
+    {
+        for(int i = 0; i < 12; i++)
+            general_keys[i] = 0;
     }
 
     for (int i = 0; i < 12; i++)
@@ -426,10 +530,10 @@ void my_read_key(void)
             break;
     }
 
-    if (successive_press_status || IO_press)
+    if (successive_press_status)    // 连发的按键输出其实类似于PWM波
     {
         unsigned int frequency = 8; // Hz
-        if (my_key_val_1 && successive_press_keys[0] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)))
+        if (my_key_val_1 && successive_press_keys[0] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)))   // 控制连发过程
         {
             my_key_val_1 = 0x00;
         }
@@ -1215,8 +1319,8 @@ void my_button_init(void)
     gpio_set_direction(IO_PORTA_01, 0); /* LED0 */
     gpio_set_direction(IO_PORTA_03, 0); /* LED2 */
 
-    gpio_set_direction(IO_PORTC_02, 0); /* debug times */
-    gpio_set_direction(IO_PORTC_04, 0); /* debug times */
+    gpio_set_direction(IO_PORTC_02, 0); /* debug */
+    gpio_set_direction(IO_PORTC_04, 0); /* debug */
 
     /* set IO input */
     gpio_set_direction(IO_PORTA_05, 1); // ADC, rocker L_X
