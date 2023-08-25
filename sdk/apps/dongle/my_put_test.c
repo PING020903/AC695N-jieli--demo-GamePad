@@ -160,19 +160,21 @@ static int trigger_value_R = 0;
 #endif /* PWM motor */
 
 #if SUCCESSIVE_PRESS
+#define SUCCESSIVE_KEYS_NUMBER_ENABLE   (14)
 #define SUCCESSIVE_OF_CYCLICALITY(a) (250U / (unsigned int)a)
 #define SUCCESSIVE_OF_HALF_CYCLICALITY(a) ((250U / (unsigned int)a) / 2) // 1000ms / x(Hz) = CYCLICALITY_TIMES, 该半周期值是近似值
 static unsigned char successive_press_status = 0;
 static unsigned char general_keys[12] = {0x00};     // 记录普通按键是否曾按下
+static unsigned char successive_trigger[2] = {0x00};// 记录扳机是否按下
 static volatile unsigned char successive_IO_LOW_status_times = 0;
-static unsigned char successive_press_keys[12] = {0x00}; // 使能连点按键, 表示按键是否被使能连点, 0普通模式 | 1连发模式
+static unsigned char successive_press_keys[SUCCESSIVE_KEYS_NUMBER_ENABLE] = {0x00}; // 使能连点按键, 表示按键是否被使能连点, 0普通模式 | 1连发模式
 #endif
 
 #if RECORD_MOVEMENT
 #define ONCE_MAX_RECORD_TIMES   (0xfffd)
 static unsigned char records_movement_key;       // 记录键被按下, 开始记录
 static unsigned char records_flag = 0;           // records ready
-static unsigned short RecordFunc_key_times = 0;  // 记录该功能按键按下时间
+//static unsigned short RecordFunc_key_times = 0;  // 记录该功能按键按下时间, 单个按键完成功能切换时启用
 static volatile unsigned short record_times = 0; // 宏记录时长, Max time is 0xff
 #if MY_ARRAY
 #define CHAR_SIZE_NEXT (4)
@@ -519,11 +521,11 @@ void my_read_key(void)
     }
     else
     {
-        for(int i = 0; i < 12; i++)
+        for(int i = 0; i < SUCCESSIVE_KEYS_NUMBER_ENABLE; i++)
             general_keys[i] = 0;
     }
 
-    for (int i = 0; i < 12; i++)
+    for (int i = 0; i < SUCCESSIVE_KEYS_NUMBER_ENABLE; i++)
     {
         successive_press_status = successive_press_keys[i];
         if (successive_press_status)
@@ -645,6 +647,66 @@ void read_trigger_value(void)
 #if TRIGGER /* trigger */
     L_trigger_ad_key = adc_get_value(8);
     R_trigger_ad_key = adc_get_value(9);
+
+#if SUCCESSIVE_PRESS
+    if ((gpio_read(IO_PORTC_03)) == 0)  // 功能按键按下
+    {
+        if(L_trigger_ad_key > TRIGGER_PRESS_VAL)
+        {
+            if (!successive_trigger[0])
+            {
+                successive_press_keys[12] ^= 0X01;
+                successive_trigger[0] = 1;
+            }
+        }
+        else
+        {
+            successive_trigger[0] = 0;
+        }
+
+        if(R_trigger_ad_key > TRIGGER_PRESS_VAL)
+        {
+            if (!successive_trigger[1])
+            {
+                successive_press_keys[13] ^= 0X01;
+                successive_trigger[1] = 1;
+            }
+        }
+        else
+        {
+            successive_trigger[1] = 0;
+        }
+    }
+    else
+    {
+        for(int i = 0; i < 2; i++)
+            successive_trigger[i] = 0;
+    }
+
+    for (int i = 0; i < SUCCESSIVE_KEYS_NUMBER_ENABLE; i++)
+    {
+       successive_press_status = successive_press_keys[i];
+        if (successive_press_status)
+            break;
+    }
+
+    if (successive_press_status)    // 连发的按键输出其实类似于PWM波
+    {
+        unsigned int frequency = 8; // Hz
+        if ((L_trigger_ad_key > TRIGGER_PRESS_VAL) && successive_press_keys[12] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)))
+        {
+            L_trigger_ad_key = 0x00;
+        }
+        if ((R_trigger_ad_key > TRIGGER_PRESS_VAL) && successive_press_keys[13] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)))
+        {
+            R_trigger_ad_key = 0x00;
+        }
+
+        if (SUCCESSIVE_OF_CYCLICALITY(frequency) < successive_IO_LOW_status_times)
+            successive_IO_LOW_status_times = 0;
+        successive_IO_LOW_status_times++;
+    }
+#endif
 
 #if LEFT_TRIGGER /* left */
     if (L_trigger_ad_key > TRIGGER_PRESS_VAL)
@@ -994,6 +1056,7 @@ void my_led_function(void)
         trigger_value_L = temp;
         if (trigger_value_L >= 10000)
             trigger_value_L = 10000;
+
         mcpwm_set_duty(pwm_ch0, pwm_timer0, trigger_value_L);
 
         // my_pwm_led_on_display(1, 0, trigger_value_L);
@@ -1113,26 +1176,30 @@ void records_movement(void)
 {
 #if RECORD_MOVEMENT
 
-    if ((gpio_read(IO_PORTC_05)) ^ 0x01)
+    if ((gpio_read(IO_PORTC_05)) ^ 0x01)    // records start key
     {
-        RecordFunc_key_times++; // add seconds
-        records_flag = 1;       // records start
-
-        if (RecordFunc_key_times > 750 && RecordFunc_key_times < 1250) // 3~5 second
+        //RecordFunc_key_times++; // add seconds
+        if((tcc_count % (800 / MAIN_TCC_TIMER)) == 0 && (gpio_read(IO_PORTC_05)) ^ 0x01)    // 延时检测按键
         {
-            records_flag = 3;   // records end
+            records_flag = 1;       // records start
             PWM_temp = 750 * 7;
             mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
         }
-        if(RecordFunc_key_times > 1250) // >5 second
-        {
-            records_flag = 5;   // reappear record
-            PWM_temp = 1250 * 6;
-            mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
-        }
+    }
+    if(gpio_read(IO_PORTC_02) ^ 0x01)   // records end key
+    {
+        records_flag = 3;   // records end
+        PWM_temp = 750 * 7;
+        mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
+    }
+    if(gpio_read(IO_PORTC_04) ^ 0x01)   // reappear record key
+    {
+        records_flag = 5;   // reappear record
+        PWM_temp = 1250 * 6;
+        mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
     }
 
-    if (((gpio_read(IO_PORTC_05)) == 1)) // 松开按键
+    if (((gpio_read(IO_PORTC_05)) == 1) && ((gpio_read(IO_PORTC_02)) == 1) && ((gpio_read(IO_PORTC_04)) == 1)) // 松开按键执行功能
     {
         if(PWM_temp)
         {
@@ -1206,7 +1273,7 @@ void records_movement(void)
         case 0: /* record ready */
         {
             //player_flicker_time = 1;    // 避免上电闪灯与record指示灯闪灯冲突
-            RecordFunc_key_times = 0;   // 按键按下时长清零, 在此处清零, 确保长时间按下不会重复触发case 1, case 3
+            //RecordFunc_key_times = 0;   // 按键按下时长清零, 在此处清零, 确保长时间按下不会重复触发case 1, case 3
             records_length = 0;         // 初始化记录长度
             if(!time_flag)
                 time_flag = 1;
@@ -1319,9 +1386,6 @@ void my_button_init(void)
     gpio_set_direction(IO_PORTA_01, 0); /* LED0 */
     gpio_set_direction(IO_PORTA_03, 0); /* LED2 */
 
-    gpio_set_direction(IO_PORTC_02, 0); /* debug */
-    gpio_set_direction(IO_PORTC_04, 0); /* debug */
-
     /* set IO input */
     gpio_set_direction(IO_PORTA_05, 1); // ADC, rocker L_X
     gpio_set_direction(IO_PORTA_06, 1); // ADC, rocker L_Y
@@ -1352,6 +1416,9 @@ void my_button_init(void)
     gpio_set_direction(IO_PORTC_03, 1); // successive press key
     gpio_set_direction(IO_PORTC_05, 1); // records movement key
     gpio_set_direction(IO_PORTC_07, 1); // back key
+
+    gpio_set_direction(IO_PORTC_02, 1); /* record end */
+    gpio_set_direction(IO_PORTC_04, 1); /* reappear record */
 
     printf("set output or input\n");
 
@@ -1387,6 +1454,9 @@ void my_button_init(void)
     gpio_set_die(IO_PORTC_03, 1); // successive press key
     gpio_set_die(IO_PORTC_05, 1); // records movement key
     gpio_set_die(IO_PORTC_07, 1); // back key
+
+    gpio_set_die(IO_PORTC_02, 1); /* record end */
+    gpio_set_die(IO_PORTC_04, 1); /* reappear record */
 
     printf("set output mode\n");
     /*************************************************************************************/
@@ -1426,6 +1496,9 @@ void my_button_init(void)
     gpio_set_pull_down(IO_PORTC_05, 0); // records movement key
     gpio_set_pull_down(IO_PORTC_07, 0); // back key
 
+    gpio_set_pull_down(IO_PORTC_02, 0); /* record end */
+    gpio_set_pull_down(IO_PORTC_04, 0); /* reappear record */
+
     printf("set pull down or no pull down\n");
     /*************************************************************************************/
 
@@ -1463,6 +1536,9 @@ void my_button_init(void)
     gpio_set_pull_up(IO_PORTC_03, 1); // successive press key
     gpio_set_pull_up(IO_PORTC_05, 1); // records movement key
     gpio_set_pull_up(IO_PORTC_07, 1); // back key
+
+    gpio_set_pull_up(IO_PORTC_02, 1); /* record end */
+    gpio_set_pull_up(IO_PORTC_04, 1); /* reappear record */
 
     printf("set pull up or no pull up\n");
     /*************************************************************************************/
