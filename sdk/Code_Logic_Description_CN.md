@@ -340,7 +340,7 @@ static const u8 sConfigDescriptor[0x09] =     // < Config Descriptor >
 
 
 
-##### 接口描述符
+##### 接口描述符以及端点描述符
 
 ```c
 static const u8 sConfigDescriptor_interface_0[0x28] =     // < USER Interface Descriptor >
