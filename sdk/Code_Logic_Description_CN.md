@@ -141,13 +141,13 @@ static inline void *SpecialFunc_timer_task(void *p_arg);
 void my_task_init(void);
 ```
 
-##### void my_task_init(void)
+#### void my_task_init(void)
 
 该函数用以将创建该线程与OS定时器以及一些IO的初始化工作，当执行完毕后不再执行。
 
 
 
-##### static inline void *my_timer_task(void *p_arg)
+#### static inline void *my_timer_task(void *p_arg)
 
 OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修饰只是为了增加一点点执行速度。定时器计时到了就会执行该函数。
 
@@ -155,7 +155,7 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 
 
-##### static inline void *led_timer_task(void *p_arg)
+#### static inline void *led_timer_task(void *p_arg)
 
 OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修饰只是为了增加一点点执行速度。定时器计时到了就会执行该函数。
 
@@ -163,7 +163,7 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 
 
-##### static inline void *SpecialFunc_timer_task(void *p_arg)
+#### static inline void *SpecialFunc_timer_task(void *p_arg)
 
 OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修饰只是为了增加一点点执行速度。定时器计时到了就会执行该函数。
 
@@ -171,7 +171,7 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 
 
-##### void my_PWM_output_init(void)
+#### void my_PWM_output_init(void)
 
 使用杰理MCU的MCPWM功能，跟STM32一样需要对硬件支持PWM输出的IO要初始化 时基、频率、占空比、输出模式。
 
@@ -179,13 +179,13 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 
 
-##### void my_button_init(void)
+#### void my_button_init(void)
 
 按键所使用的普通IO与摇杆所使用的ADC IO的初始化，关于杰里MCU调用IO的封装函数，请看代码。
 
 
 
-##### void my_read_key(void)
+#### void my_read_key(void)
 
 读取普通IO输入的函数。
 
@@ -193,13 +193,13 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 
 
-##### static inline unsigned char merge_value(unsigned char all_key, unsigned char key, unsigned int bit)
+#### static inline unsigned char merge_value(unsigned char all_key, unsigned char key, unsigned int bit)
 
 将键值key（键值只有0或1两种状态）填入all_key，bit表示要填如all_key的第几位，0~7bit。
 
 
 
-##### void read_trigger_value(void)
+#### void read_trigger_value(void)
 
 读取左扳机与右扳机的ADC值，设置两端的死区，取真实轴中间的值重新做轴映射。
 
@@ -207,7 +207,7 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 
 
-##### void left_read_rocker(void)
+#### void left_read_rocker(void)
 
 读取左摇杆的ADC值，与读取扳机的ADC值类似，也要取轴中间值重新做轴映射，与之不同的是摇杆的ADC值初始值就在中间，需要给中间做死区。
 
@@ -217,19 +217,19 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 
 
-##### void right_read_rocker(void)
+#### void right_read_rocker(void)
 
 读取右摇杆的ADC值，实现原理与读取左摇杆相同。
 
 
 
-##### static inline unsigned int xbox360_tx_data(const usb_dev usb_id, const u8 *buffer, unsigned int len)
+#### static inline unsigned int xbox360_tx_data(const usb_dev usb_id, const u8 *buffer, unsigned int len)
 
 调用本demo project中的封装的USB发送函数，usb_id 是USB设备的id号，buffer 要发送的字符串，len 要发送的字符串的长度。
 
 
 
-##### static inline void send_data_to_host(void)
+#### static inline void send_data_to_host(void)
 
 检查键值、摇杆、扳机是否有变化，判断主机是否允许从机输入（SOF PND），发送描述从机键值变化的字符串。
 
@@ -237,7 +237,7 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 
 
-##### void my_led_function(void)
+#### void my_led_function(void)
 
 控制PWM输出控制马达转速。
 
@@ -245,13 +245,13 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 
 
-##### void connect_flicker(void)
+#### void connect_flicker(void)
 
 上电后USB连接成功，处理主机发送给设备的数据，使player指示灯闪烁
 
 
 
-##### void records_movement(void)
+#### void records_movement(void)
 
 按键记录宏功能。键值有变化时记录键值，无变化时记录时间。使用数组存储键值与时间。
 
