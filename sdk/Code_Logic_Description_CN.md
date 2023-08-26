@@ -203,7 +203,8 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 读取左扳机与右扳机的ADC值，设置两端的死区，取真实轴中间的值重新做轴映射。
 
-![9eabc04d-be1d-4832-b354-500c16335d17](file:///C:/Users/YHJ/Pictures/Typedown/9eabc04d-be1d-4832-b354-500c16335d17.png)
+![image](https://github.com/PING020903/AC695N-demo-xbox360-WindowsPC_only/assets/88314322/75350701-c57c-4d2f-a529-f528311a75d4)
+
 
 
 
@@ -213,7 +214,8 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 实际有效读取区域如下图蓝色区域，中间黑色是非读取区域，极限边缘：
 
-![3f10230c-b823-4bab-b791-cde6d599dbb2](file:///C:/Users/YHJ/Pictures/Typedown/3f10230c-b823-4bab-b791-cde6d599dbb2.png)
+![image](https://github.com/PING020903/AC695N-demo-xbox360-WindowsPC_only/assets/88314322/ee93a0f9-1006-40c8-bdd1-fe1dd8d16458)
+
 
 
 
