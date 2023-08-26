@@ -70,7 +70,8 @@
 
 如下图，其中思想参考*状态机*，具体参考demo project中的*程序范例*
 
-![b75c0f2311e29e77d3a2770bfbb3e96b](file:///E:/Wecom_files_WangJinping/WXWork/1688854286476762/Cache/Image/2023-08/b75c0f2311e29e77d3a2770bfbb3e96b.jpg)
+![_1657862246_1693050692149_1693050692000_wifi_0](https://github.com/PING020903/AC695N-demo-xbox360-WindowsPC_only/assets/88314322/efbbaab8-897a-46be-906f-eb54580993d5)
+
 
 ### 宏开关
 
