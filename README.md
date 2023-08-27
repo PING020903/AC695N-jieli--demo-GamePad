@@ -1,7 +1,7 @@
 # AC695N-demo_xbox360_WindowsPC_only
 基于杰理AC695N系列，AC6951C的游戏手柄控制器   
-将usb通讯抓包，拙略模仿Xbox360对WindowsPC的通信   
-测试在WindowsPC中有反应勉强能用，但Xbox主机中并没有任何反应
+将usb通讯抓包，模仿Xbox360对WindowsPC的通信   
+测试在WindowsPC中有反应能用，但没做Xbox主机适配
 # 该demo project本人是用code::blocks打开.cbp文件，按齿轮形状的按钮( build )，即便可以进行编译( 前提是你的电脑需要事先安装GUN编译 )   
    
 # 按下 build 后若你的电脑有连接开发板，且开发板处于烧录模式，即可自动下载到 flash 中    
