@@ -162,20 +162,21 @@ static int trigger_value_R = 0;
 #if SUCCESSIVE_PRESS
 #define SUCCESSIVE_KEYS_NUMBER_ENABLE   (14)
 #define SUCCESSIVE_OF_CYCLICALITY(a) (250U / (unsigned int)a)
-#define SUCCESSIVE_OF_HALF_CYCLICALITY(a) ((250U / (unsigned int)a) / 2) // 1000ms / x(Hz) = CYCLICALITY_TIMES, 该半周期值是近似值
+#define SUCCESSIVE_OF_HALF_CYCLICALITY(a) (SUCCESSIVE_OF_CYCLICALITY(a) / 2) // 1000ms / x(Hz) = CYCLICALITY_TIMES, 该半周期值是近似值
 static unsigned char successive_press_status = 0;
+static unsigned int frequency = 8; // Hz
 static unsigned char general_keys[12] = {0x00};     // 记录普通按键是否曾按下
-static unsigned char successive_trigger[2] = {0x00};// 记录扳机是否按下
-static volatile unsigned char successive_IO_LOW_status_times = 0;
+static unsigned char successive_trigger[2] = {0x00};// 记录扳机是否曾按下
+static unsigned char successive_IO_LOW_status_times = 0;
 static unsigned char successive_press_keys[SUCCESSIVE_KEYS_NUMBER_ENABLE] = {0x00}; // 使能连点按键, 表示按键是否被使能连点, 0普通模式 | 1连发模式
 #endif
 
 #if RECORD_MOVEMENT
 #define ONCE_MAX_RECORD_TIMES   (0xfffd)
 static unsigned char records_movement_key;       // 记录键被按下, 开始记录
-static unsigned char records_flag = 0;           // records ready
+static unsigned char records_flag = 0;           // "record function" status
 //static unsigned short RecordFunc_key_times = 0;  // 记录该功能按键按下时间, 单个按键完成功能切换时启用
-static volatile unsigned short record_times = 0; // 宏记录时长, Max time is 0xff
+//static volatile unsigned short record_times = 0; // 宏记录时长, Max time is 0xff
 #if MY_ARRAY
 #define CHAR_SIZE_NEXT (4)
 #define SHORT_SIZE_NEXT (2)
@@ -534,8 +535,7 @@ void my_read_key(void)
 
     if (successive_press_status)    // 连发的按键输出其实类似于PWM波
     {
-        unsigned int frequency = 8; // Hz
-        if (my_key_val_1 && successive_press_keys[0] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)))   // 控制连发过程
+        if (my_key_val_1 && successive_press_keys[0] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)))   // 控制连发低电平时间
         {
             my_key_val_1 = 0x00;
         }
@@ -587,7 +587,7 @@ void my_read_key(void)
             R_rocker_io_key = 0x00;
         }
 
-        if (SUCCESSIVE_OF_CYCLICALITY(frequency) < successive_IO_LOW_status_times)
+        if (SUCCESSIVE_OF_CYCLICALITY(frequency) <= successive_IO_LOW_status_times)
             successive_IO_LOW_status_times = 0;
         successive_IO_LOW_status_times++;
     }
@@ -617,7 +617,6 @@ void my_read_key(void)
     io_key_status = merge_value(io_key_status, x_key_val, 6);      // X
     io_key_status = merge_value(io_key_status, y_key_val, 7);      // Y
     data_send_to_host[3] = io_key_status;
-
 #endif /* IO key */
 
 #if MY_PRINTF
@@ -692,7 +691,6 @@ void read_trigger_value(void)
 
     if (successive_press_status)    // 连发的按键输出其实类似于PWM波
     {
-        unsigned int frequency = 8; // Hz
         if ((L_trigger_ad_key > TRIGGER_PRESS_VAL) && successive_press_keys[12] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)))
         {
             L_trigger_ad_key = 0x00;
@@ -1648,6 +1646,11 @@ void my_task_init(void)
     my_button_init();
     my_PWM_output_init();
     data_send_to_host[1] = 0x14;
+
+#if SUCCESSIVE_PRESS
+    float temp = frequency / 2.0;
+    frequency = temp;
+#endif
 
 #if RECORD_MOVEMENT
 #if MY_LIST
