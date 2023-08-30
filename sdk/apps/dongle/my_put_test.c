@@ -17,6 +17,7 @@
 #include "typedef.h"
 #include "printf.h"
 #include "event.h"
+#include "syscfg_id.h"
 
 #include "generic/gpio.h"
 #include "generic/log.h"
@@ -45,6 +46,8 @@
 #define RIGHT_ROCKER_Y_AXIS 1   // 右摇杆Y轴
 
 #define SUCCESSIVE_PRESS    1   // 连点功能
+#define VM_TEST             1   // VM 区域读写
+#define CHECK_MEMORY        0   // 打印实时内存信息
 
 #define FUNC_TIMESTAMP      0   // 粗略测量函数执行时间
 
@@ -67,32 +70,31 @@ func_name:      | my_read_key   | read_trigger_value| left_read_rocker  | right_
 start_value:    |       2       |           4       |       6           |           8       |       0
 end_value:      |       3       |           5       |       7           |           9       |       1
 */
-#define NMD (1)        // 该宏执行一次打印, 分别在刚进入函数与函数结束, 但不知为何一旦打印就队列溢出
-#define START_FUNC (0) // 起始函数值
-#define END_FUNC (0)   // 结束函数值
+#define RESET_VAL   (1)     // 该宏执行一次打印, 分别在刚进入函数与函数结束, 串口打印一次约耗时5ms, 谨慎使用( 容易导致任务队列溢出u )
+#define START_FUNC  (0)     // 起始函数值
+#define END_FUNC    (0)     // 结束函数值
 
 static unsigned char count_all_func[10]; // function start to end time
 #endif
 
-#define MY_TASK_NAME "thursday"
-#define MAIN_TCC_TIMER (4)
-#define LED_TCC_TIMER (8)
-#define SPECIAL_FUNC_TCC (6)
+#define MY_TASK_NAME        "thursday"
+#define MAIN_TCC_TIMER      (4)
+#define LED_TCC_TIMER       (8)
+#define SPECIAL_FUNC_TCC    (6)
 
-#define DEADBAND_X1 (490)      // internal deadband, minus side of the axis
-#define DEADBAND_X2 (575)      // internal deadband, plus side of the axis
-#define TRIGGER_INIT_VAL (30)  // trigger initial value
-#define TRIGGER_PRESS_VAL (45) // more than the value, so press the trigger
+#define DEADBAND_X1         (490)       // internal deadband, minus side of the axis
+#define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
+#define TRIGGER_INIT_VAL    (30)        // trigger initial value
+#define TRIGGER_PRESS_VAL   (45)        // more than the value, so press the trigger
 
-extern usb_dev usbfd;            // form task_pc.c
-extern unsigned char trigger[2]; // form uac1.c
+extern usb_dev usbfd;            // from task_pc.c
+extern unsigned char trigger[2]; // from uac1.c
 extern unsigned char player_led; // from uac1.c
 
 extern void my_pwm_led_on_display(u8 led_index, u16 led0_bright, u16 led1_bright);
 extern void mcpwm_init(struct pwm_platform_data *arg);
 extern void mcpwm_set_duty(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch, u16 duty);
 extern void log_pwm_info(pwm_ch_num_type pwm_ch, pwm_timer_num_type timer_ch);
-extern void user_ListHead_init(struct list_head *nodeHead);
 
 volatile unsigned int tcc_count = 0;
 volatile unsigned int tcc_conut_led = 0;
@@ -101,6 +103,7 @@ volatile unsigned int tcc_connt_SpecialFunc = 0;
 static int ret_id_timer; // timer ID
 static int ret_id_timer_led;
 static int ret_id_timer_SpecialFunctions;
+static unsigned char timer_send_flag = 0;
 
 static unsigned char data_send_to_host[20] = {0x00}; /* using the variant have to set zero , in the after assign the value */
 static unsigned char data_send_to_host_temp[20] = {0x00};
@@ -160,9 +163,9 @@ static int trigger_value_R = 0;
 #endif /* PWM motor */
 
 #if SUCCESSIVE_PRESS
-#define SUCCESSIVE_KEYS_NUMBER_ENABLE   (14)
-#define SUCCESSIVE_OF_CYCLICALITY(a) (250U / (unsigned int)a)
-#define SUCCESSIVE_OF_HALF_CYCLICALITY(a) (SUCCESSIVE_OF_CYCLICALITY(a) / 2) // 1000ms / x(Hz) = CYCLICALITY_TIMES, 该半周期值是近似值
+#define SUCCESSIVE_KEYS_NUMBER_ENABLE       (14)
+#define SUCCESSIVE_OF_CYCLICALITY(a)        (250U / (unsigned int)a)
+#define SUCCESSIVE_OF_HALF_CYCLICALITY(a)   (SUCCESSIVE_OF_CYCLICALITY(a) / 2) // 1000ms / x(Hz) = CYCLICALITY_TIMES, 该半周期值是近似值
 static unsigned char successive_press_status = 0;
 static unsigned int frequency = 8; // Hz
 static unsigned char general_keys[12] = {0x00};     // 记录普通按键是否曾按下
@@ -173,14 +176,17 @@ static unsigned char successive_press_keys[SUCCESSIVE_KEYS_NUMBER_ENABLE] = {0x0
 
 #if RECORD_MOVEMENT
 #define ONCE_MAX_RECORD_TIMES   (0xfffd)
+static unsigned char successive_temp[SUCCESSIVE_KEYS_NUMBER_ENABLE];    // 连点状态保存, 进入按键编程禁用连点, 连点容易导致记录的数组资源枯竭
 static unsigned char records_movement_key;       // 记录键被按下, 开始记录
 static unsigned char records_flag = 0;           // "record function" status
 //static unsigned short RecordFunc_key_times = 0;  // 记录该功能按键按下时间, 单个按键完成功能切换时启用
 //static volatile unsigned short record_times = 0; // 宏记录时长, Max time is 0xff
 #if MY_ARRAY
-#define CHAR_SIZE_NEXT (4)
-#define SHORT_SIZE_NEXT (2)
-#define MAX_RECORD_ARRAY_LEN (128)               // "记录"最大长度
+#define CHAR_SIZE_NEXT          (4)
+#define SHORT_SIZE_NEXT         (2)
+#define LEN_RECORD_VM           (1)             // 用于保存记录长度
+#define MAX_RECORD_ARRAY_LEN    (512)           // "记录"最大长度
+#define TIMES_LIMIT             (30)            // 最长时间, 单位: 秒(s)
 static int record_player_led;                   // player LED IO
 static unsigned short PWM_temp;                 // 减少进入PWM占空比设置函数
 static unsigned char time_flag = 1;             // 每次记录前都要记得将时间清零
@@ -188,6 +194,7 @@ static unsigned char ban_flag = 0;              // 不能直接记录(case 1)后
 static unsigned char reappear_record = 0;       // 复现按键当前状态记录
 static unsigned char records_length = 0;        // 记录长度( 参与计算 )
 static unsigned char records_length_temp = 0;   // 临时记录长度( 不参与计算 )
+static unsigned short effective_record_ms = 0;  // 实际有效记录时长
 static unsigned short reappear_times_temp[MAX_RECORD_ARRAY_LEN] = {0x00}; // 临时时间记录
 static unsigned int records_keys[MAX_RECORD_ARRAY_LEN] = {0x00}; // 记录键值与时间
 static unsigned int *records_keys_point = &records_keys;     // 第一次:  *((unsigned char*)records_keys_point + (4 * 0) ) = data_send_to_host[2],
@@ -216,7 +223,18 @@ struct keys_info_node
 };
 struct keys_info_node key_info_head;
 #endif
+#if VM_TEST
+//#define USER_VM_ID_MAX  (49)
+
+#define NUM_FOR_VM_LEN  MAX_RECORD_ARRAY_LEN
+static unsigned char VM_userID = 1; // VM user space, 1~49
+static unsigned char VM_recordNUM = 0;
+//static u32 record_buf[NUM_FOR_VM_LEN]  __attribute__((aligned(4)));   // GUN C support only, GUN C独有的, 尽可能按照4字节对齐
+static void* buf_point;   // write and read
 #endif
+#endif
+
+
 
 static volatile unsigned char io_key_status;    // merged io key
 static unsigned char motor_flag = 1;            // 清除初始化的占空比值 Clear the initialised duty cycle value
@@ -351,7 +369,7 @@ void my_read_key(void)
 #if 1
     if ((gpio_read(IO_PORTC_03)) ^ 0x01)    // 按下
     {
-       
+
     }
 #endif
 
@@ -535,7 +553,7 @@ void my_read_key(void)
 
     if (successive_press_status)    // 连发的按键输出其实类似于PWM波
     {
-        if (my_key_val_1 && successive_press_keys[0] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)))   // 控制连发低电平时间
+        if (my_key_val_1 && successive_press_keys[0] && (successive_IO_LOW_status_times < SUCCESSIVE_OF_HALF_CYCLICALITY(frequency)))// 控制连发表示按键状态低时间
         {
             my_key_val_1 = 0x00;
         }
@@ -604,9 +622,6 @@ void my_read_key(void)
     io_key_status = merge_value(io_key_status, L_rocker_io_key, 6); //  left_3
     io_key_status = merge_value(io_key_status, R_rocker_io_key, 7); // right_3
     data_send_to_host[2] = io_key_status;
-#if RECORD_MOVEMENT
-
-#endif
 
     io_key_status = 0x00;                                          /* using the variant have to set zero , in the after assign the value*/
     io_key_status = merge_value(io_key_status, L_1_io_key, 0);     //  left_1
@@ -1107,7 +1122,7 @@ void connect_flicker(void)
         exit_flicker = 1;
         return;
     }
-        
+
     switch (player_led)
     {
     case 1:
@@ -1173,7 +1188,7 @@ void connect_flicker(void)
 void records_movement(void)
 {
 #if RECORD_MOVEMENT
-
+#if 1   // record_func key
     if ((gpio_read(IO_PORTC_05)) ^ 0x01)    // records start key
     {
         //RecordFunc_key_times++; // add seconds
@@ -1182,21 +1197,23 @@ void records_movement(void)
             records_flag = 1;       // records start
             PWM_temp = 750 * 7;
             mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
+            for (int i = 0; i < SUCCESSIVE_KEYS_NUMBER_ENABLE; i++) // 保存连点按键
+                successive_temp[i] = successive_press_keys[i];
         }
     }
-    if(gpio_read(IO_PORTC_02) ^ 0x01)   // records end key
+    if (gpio_read(IO_PORTC_02) ^ 0x01)   // records end key
     {
         records_flag = 3;   // records end
         PWM_temp = 750 * 7;
         mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
     }
-    if(gpio_read(IO_PORTC_04) ^ 0x01)   // reappear record key
+    if (gpio_read(IO_PORTC_04) ^ 0x01)   // reappear record key
     {
         records_flag = 5;   // reappear record
         PWM_temp = 1250 * 6;
         mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
     }
-
+#endif
     if (((gpio_read(IO_PORTC_05)) == 1) && ((gpio_read(IO_PORTC_02)) == 1) && ((gpio_read(IO_PORTC_04)) == 1)) // 松开按键执行功能
     {
         if(PWM_temp)
@@ -1204,11 +1221,19 @@ void records_movement(void)
             PWM_temp = 0;
             mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
         }
-            
+
         switch (records_flag)
         {
         case 1: /* record */
         {
+            for (int i = 0; i < SUCCESSIVE_KEYS_NUMBER_ENABLE; i++) // 禁用连点功能
+                successive_press_keys[i] = 0;
+            if (effective_record_ms >= (TIMES_LIMIT * 1000 / MAIN_TCC_TIMER)) // 限制记录时间
+            {
+                printf("------ Maximum recorded time reached ! ! ! %d (s) -------", TIMES_LIMIT);
+                records_flag = 3;
+                break;
+            }
             ban_flag = 1;
             if ((tcc_count % (2000 / MAIN_TCC_TIMER)) == 0)
                 printf("---- recording ----");
@@ -1250,22 +1275,51 @@ void records_movement(void)
                 (*((unsigned short *)records_keys_point + 1 + (SHORT_SIZE_NEXT * records_length)))++; //  记录持续时间, record duration
                 if (records_length != temp)
                 {
-                    printf("%x\n%x", *((unsigned char *)records_keys_point + (CHAR_SIZE_NEXT * records_length)), 
+                    printf("%x\n%x", *((unsigned char *)records_keys_point + (CHAR_SIZE_NEXT * records_length)),
                     *((unsigned char *)records_keys_point + 1 + (CHAR_SIZE_NEXT * records_length)));
                 }
             }
-            
+            effective_record_ms++;
         }
         break;
         case 3: /* record end */
         {
             printf("---- record end ----");
             gpio_direction_output(record_player_led, 1);    // 结束记录状态指示灯常亮
+            if (effective_record_ms)
+                effective_record_ms = 0;    // 总时长清零
+
+            for (int i = 0; i < SUCCESSIVE_KEYS_NUMBER_ENABLE; i++) // 恢复连点功能
+                successive_press_keys[i] = successive_temp[i];
+
             records_flag = 0;                       // records ready
             records_length_temp = records_length;   // 该临时变量不用作计数, 用作比较
+            *(records_keys_point + MAX_RECORD_ARRAY_LEN) = records_length_temp; // 保存当前编程按键记录的长度
             if(ban_flag)     // 有过记录才运行该标志位置0, 放行case 5
                 ban_flag = 0;
-            
+
+#if VM_TEST   // 读VM需耗时75ms, 写VM需耗时38ms, 超出了定时器限制会导致任务队列溢出, 需要限制任务队列的发送
+
+            timer_send_flag = 1;    // VM开始进行读写操作
+            unsigned char write_flag = 0;
+
+            //int ret_r = syscfg_read(1, buf_point, NUM_FOR_VM_LEN * 4);
+            //printf("VM read ret: %d", ret_r);
+
+            try_again_write:
+            int ret_w = syscfg_write(1, buf_point, (NUM_FOR_VM_LEN + LEN_RECORD_VM) * 4); // 此时buf_point是有记录的真实数据
+            write_flag++;
+            if (ret_w < 0 || write_flag >= 2)   // 写入失败, 失败次数大于3
+            {
+                if(write_flag < 2)
+                    goto try_again_write;
+                else
+                    printf("    VM write ret: %d, WRITE ERROR ! ! !", ret_w);
+            }
+
+            timer_send_flag = 0;
+#endif
+
         }
         break;
         case 0: /* record ready */
@@ -1297,7 +1351,7 @@ void records_movement(void)
                 records_flag = 0;
                 break;
             }
-            
+
 /* keys value reappear */
             for (; reappear_record < records_length_temp;)
             {
@@ -1349,6 +1403,10 @@ void *my_task(void *p_arg)
             right_read_rocker();
             read_trigger_value();
             send_data_to_host();
+#if CHECK_MEMORY
+            if((tcc_count % (6000 / MAIN_TCC_TIMER)) == 0)
+                mem_stats();    // 实时查看RAM
+#endif
         }
         break;
         case BREATHE_LED_TASK:
@@ -1611,8 +1669,10 @@ void my_PWM_output_init(void)
 
 static inline void *my_timer_task(void *p_arg)
 {
-    int ret = os_taskq_post_type(MY_TASK_NAME, MAIN_TCC_TASK, 0, NULL);
-    if (ret != OS_NO_ERR)
+    int ret = 0;
+    if(!timer_send_flag)    // 当VM在读写的时候使定时器不发送任务队列
+        ret = os_taskq_post_type(MY_TASK_NAME, MAIN_TCC_TASK, 0, NULL);
+    if (ret != OS_NO_ERR)   // 0~65, from "os_error.h"
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
 
     tcc_count++;
@@ -1620,8 +1680,10 @@ static inline void *my_timer_task(void *p_arg)
 }
 static inline void *led_timer_task(void *p_arg)
 {
-    int ret = os_taskq_post_type(MY_TASK_NAME, BREATHE_LED_TASK, 0, NULL);
-    if (ret != OS_NO_ERR)
+    int ret = 0;
+    if(!timer_send_flag)    // 当VM在读写的时候使定时器不发送任务队列
+        ret = os_taskq_post_type(MY_TASK_NAME, BREATHE_LED_TASK, 0, NULL);
+    if (ret != OS_NO_ERR)   // 0~65, from "os_error.h"
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    BREATHE_LED_TASK return value : %d\n", ret);
 
     tcc_conut_led++;
@@ -1645,11 +1707,32 @@ void my_task_init(void)
 
     my_button_init();
     my_PWM_output_init();
-    data_send_to_host[1] = 0x14;
+
+    data_send_to_host[1] = 0x14;    // 长度是固定的
+    buf_point = records_keys_point; // 指向要被写入VM的数据
 
 #if SUCCESSIVE_PRESS
     float temp = frequency / 2.0;
     frequency = temp;
+#endif
+
+#if VM_TEST
+
+    for(int i = 0; i < NUM_FOR_VM_LEN; i++) // clear read VM buffer
+        *((unsigned int*)buf_point + i) = 0;
+
+    //int ret_w = syscfg_write(1, buf_point, NUM_FOR_VM_LEN * 4);
+    //printf("VM write ret: %d", ret_w);
+
+
+    // 除非重新烧写, 否则即使掉电数据仍然存储在VM区域
+    int ret_r = syscfg_read(1, buf_point, (NUM_FOR_VM_LEN + LEN_RECORD_VM) * 4);
+    printf(" VM READ RET: %d", ret_r);
+    if (ret_r < 0)
+        printf(" NO RECORD ! ! !");
+    records_length_temp = *(records_keys_point + MAX_RECORD_ARRAY_LEN); // 将从VM读取的数据, 保存当前按键编程记录的长度
+    for (int i = 0; i < records_length_temp; i++)                       // 将时间记录赋值
+        reappear_times_temp[i] = (*((unsigned short*)records_keys_point + 1 + (SHORT_SIZE_NEXT * i)));
 #endif
 
 #if RECORD_MOVEMENT
@@ -1693,7 +1776,7 @@ void my_task_init(void)
     for (int i = 0; i < 10; i++)
     {
         if (i >= START_FUNC && i < (END_FUNC + 1))
-            count_all_func[i] = NMD;
+            count_all_func[i] = RESET_VAL;
         else
             count_all_func[i] = 0;
     }
