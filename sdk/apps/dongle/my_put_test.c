@@ -176,9 +176,10 @@ static unsigned char successive_press_keys[SUCCESSIVE_KEYS_NUMBER_ENABLE] = {0x0
 
 #if RECORD_MOVEMENT
 #define ONCE_MAX_RECORD_TIMES   (0xfffd)
+static unsigned char key_start_press = 0;           // 有可记录的按键按下后开始记录
 static unsigned char successive_temp[SUCCESSIVE_KEYS_NUMBER_ENABLE];    // 连点状态保存, 进入按键编程禁用连点, 连点容易导致记录的数组资源枯竭
-static unsigned char records_movement_key;       // 记录键被按下, 开始记录
-static unsigned char records_flag = 0;           // "record function" status
+static unsigned char records_movement_key;          // 记录键被按下, 进入开始记录状态
+static unsigned char records_flag = 0;              // "record function" status
 //static unsigned short RecordFunc_key_times = 0;  // 记录该功能按键按下时间, 单个按键完成功能切换时启用
 //static volatile unsigned short record_times = 0; // 宏记录时长, Max time is 0xff
 #if MY_ARRAY
@@ -366,11 +367,17 @@ void my_read_key(void)
     // JL_PORTA->IN |= BIT(0);  // 输入选择
 #endif
 
-#if 1
-    if ((gpio_read(IO_PORTC_03)) ^ 0x01)    // 按下
+#if RECORD_MOVEMENT
+    if (records_movement_key)
     {
-
+        if (L_rocker_io_key || R_rocker_io_key || L_1_io_key || R_1_io_key ||
+            my_key_val_1 || my_key_val_2 || my_key_val_3 || my_key_val_4 ||
+            a_key_val || b_key_val || x_key_val || y_key_val)    // 可记录按键按下
+        {
+            key_start_press = 1;
+        }
     }
+    
 #endif
 
 
@@ -1047,7 +1054,7 @@ void my_led_function(void)
     while (motor_flag)
     {
         unsigned int register_temp = JL_USB->CON0;
-        register_temp = ((register_temp << 18) >> 31); // 13th bit, SOF_PND
+        register_temp = ((register_temp << 18) >> 31); // get USB_CON0 register, 13th bit, SOF_PND
         if (register_temp)
         {
             mcpwm_set_duty(pwm_ch0, pwm_timer0, 0);
@@ -1093,8 +1100,6 @@ void my_led_function(void)
     }
 #endif /* right motor */
 #endif
-
-    // printf("USB : %X \n", JL_USB->CON0);            // get USB_CON0 register
 
     // printf("watch dog stutas : %x\n", p33_rx_1byte(P3_WDT_CON));  // use this function read watch dog status from this address
 
@@ -1195,6 +1200,7 @@ void records_movement(void)
         if((tcc_count % (800 / MAIN_TCC_TIMER)) == 0 && (gpio_read(IO_PORTC_05)) ^ 0x01)    // 延时检测按键
         {
             records_flag = 1;       // records start
+            records_movement_key = 1;
             PWM_temp = 750 * 7;
             mcpwm_set_duty(pwm_ch0, pwm_timer0, PWM_temp);
             for (int i = 0; i < SUCCESSIVE_KEYS_NUMBER_ENABLE; i++) // 保存连点按键
@@ -1253,10 +1259,14 @@ void records_movement(void)
 
             if (data_send_to_host_temp[2] == data_send_to_host[2] && data_send_to_host_temp[3] == data_send_to_host[3] && time_flag == 0)
             {
-                (*((unsigned short *)records_keys_point + 1 + (2 * records_length)))++; //  记录持续时间, record duration
-                if((*((unsigned short *)records_keys_point + 1 + (2 * records_length))) == ONCE_MAX_RECORD_TIMES)  // 超出单次按键时间最大记录, 长度+1
-                    goto length_add;
-                reappear_times_temp[records_length] = (*((unsigned short *)records_keys_point + 1 + (2 * records_length))); // 给临时时间记录赋值
+                if (key_start_press)
+                {
+                    (*((unsigned short*)records_keys_point + 1 + (2 * records_length)))++; //  记录持续时间, record duration
+                    if ((*((unsigned short*)records_keys_point + 1 + (2 * records_length))) == ONCE_MAX_RECORD_TIMES)  // 超出单次按键时间最大记录, 长度+1
+                        goto length_add;
+                    reappear_times_temp[records_length] = (*((unsigned short*)records_keys_point + 1 + (2 * records_length))); // 给临时时间记录赋值
+                }
+                
             }
             else
             {
@@ -1285,6 +1295,11 @@ void records_movement(void)
         case 3: /* record end */
         {
             printf("---- record end ----");
+
+            // 按键按下记录清零
+            records_movement_key = 0;   
+            key_start_press = 0;
+
             gpio_direction_output(record_player_led, 1);    // 结束记录状态指示灯常亮
             if (effective_record_ms)
                 effective_record_ms = 0;    // 总时长清零
@@ -1708,6 +1723,13 @@ void my_task_init(void)
     my_button_init();
     my_PWM_output_init();
 
+    extern unsigned char temp_list[2][8];
+    extern unsigned char my_device_type[2];   // from descriptor.c
+    printf("device_type[0]: %x", my_device_type[0]);
+    printf("ep0 temp_list >> %x %x %x %x %x %x %x %x ", temp_list[0][0], temp_list[0][1], temp_list[0][2], temp_list[0][3], temp_list[0][4], temp_list[0][5], temp_list[0][6], temp_list[0][7]);
+    printf("ep0 temp_list >> %x %x %x %x %x %x %x %x ", temp_list[1][0], temp_list[1][1], temp_list[1][2], temp_list[1][3], temp_list[1][4], temp_list[1][5], temp_list[1][6], temp_list[1][7]);
+
+
     data_send_to_host[1] = 0x14;    // 长度是固定的
     buf_point = records_keys_point; // 指向要被写入VM的数据
 
@@ -1743,6 +1765,8 @@ void my_task_init(void)
     key_info_head.record_times = 0;
     my_node_init(key_info_head);
 #endif
+    unsigned int ep_temp = JL_USB->EP0_ADR;
+    printf("[INFO] JL_USB->EP0_ADR: %X", ep_temp);
 #endif
 
 #if THREAD_CREATE
