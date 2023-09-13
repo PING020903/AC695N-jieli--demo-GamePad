@@ -12,6 +12,7 @@
 #include "printf.h"
 #include "usb/usb_phy.h"
 #include "usb/device/usb_stack.h"
+#include "generic/list.h"
 //#include "lbuf.h"
 
 
@@ -22,8 +23,7 @@ enum {
     SPECIAL_FUNCTIONS,
 };
 
-
-
+/******************** Xbox360 configuration, only support PC *****************************************/
 void my_read_key(void);             // 读取IO按键按键的状态, 由于是要上拉, 故此读取后需取反
 void read_trigger_value(void);      // 读取扳机的AD输入值, 该值由vbat对比而来
 void left_read_rocker(void);        // 读取左摇杆的AD输入值
@@ -34,6 +34,14 @@ void my_led_function(void);         // 实际上是PWM输出函数, 试验完毕
 void connect_flicker(void);         // 连接成功后player指示灯熄灭亮起4次
 
 void records_movement(void);        // 记录按键行动
+/*****************************************************************************************************/
+
+/***************************************** PS3 configuration *****************************************/
+void ps3_read_key(void);
+void ps3_read_trigger(void);
+void ps3_left_read_rocker(void);
+void ps3_right_read_rocker(void);
+/*****************************************************************************************************/
 
 void my_button_init(void);          // IO初始化
 void my_PWM_output_init(void);      // PWM输出初始化
