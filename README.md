@@ -1,7 +1,7 @@
 # AC695N-demo_xbox360_WindowsPC_only
 基于杰理AC695N系列，AC6951C的游戏手柄控制器   
 将usb通讯抓包，模仿Xbox360对WindowsPC的通信   
-测试在WindowsPC中有反应能用，但没做Xbox主机适配
+测试在WindowsPC中有反应、能用，但没做Xbox主机适配
 # 该demo project本人是用code::blocks打开.cbp文件，按齿轮形状的按钮( build )，即便可以进行编译( 前提是你的电脑需要事先安装GUN编译 ) 
 # 切记！！！要记得安装杰理包管理器！！！
    
@@ -14,3 +14,5 @@
 
 # 更多请阅读该路径下的详细代码逻辑描述
 > /sdk/Code_Logic_Description_CN.md
+
+2023.9.13: 增加了對PS3的支持，但沒有支持PS3的三軸傳感器。將默認支持Xbox360修改為默認支持PS3，利用WindowsOS會多次發送USB復位信號切換為Xbox360模式。若要修改為默認Xbox360模式，將不能用相同的方法判斷主機平臺自行切換至PS3平臺。
