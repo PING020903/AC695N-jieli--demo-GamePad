@@ -56,12 +56,16 @@
 #define PWM_TIEMR           1   // PWM定时器
 #define SPECIAL_FUNC_TIMER  0   // 特殊功能定时器
 #define MY_PRINTF           0   // 我的打印
+#define PWM_INIT            1   // PWM初始化
 
 #define RECORD_MOVEMENT     1   // 功能: 记录一定时间内的键值
 #define MY_LIST             0   // 用不了malloc(), 转用planA: 数组, (planB: 链表)我用不了
 #define MY_ARRAY            1   // 记录一定时间内的键值( 数组方式存储 )
+#define RIGHT_ROCKER_PRINT  0
+#define LEFT_ROCKER_PRINT   0
+#define PS3_KEY_PRINT       1
 /***********************************************/
-
+static u8 usb_timeout = 0;
 #if FUNC_TIMESTAMP
 
 /*  以一种很粗糙的方式去判断函数的执行时间
@@ -80,10 +84,12 @@ static unsigned char count_all_func[10]; // function start to end time
 #define MY_TASK_NAME        "thursday"
 #define MAIN_TCC_TIMER      (4)
 #define LED_TCC_TIMER       (8)
-#define SPECIAL_FUNC_TCC    (6)
+#define SPECIAL_FUNC_TCC    (5000)
 
 #define DEADBAND_X1         (490)       // internal deadband, minus side of the axis
 #define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
+#define PS3_DEADBAND_X1     (460)
+#define PS3_DEADBAND_X2     (600)
 #define TRIGGER_INIT_VAL    (30)        // trigger initial value
 #define TRIGGER_PRESS_VAL   (45)        // more than the value, so press the trigger
 
@@ -103,10 +109,12 @@ volatile unsigned int tcc_connt_SpecialFunc = 0;
 static int ret_id_timer; // timer ID
 static int ret_id_timer_led;
 static int ret_id_timer_SpecialFunctions;
-static unsigned char timer_send_flag = 0;
+unsigned char timer_send_flag = 0;
 
-static unsigned char data_send_to_host[20] = {0x00}; /* using the variant have to set zero , in the after assign the value */
-static unsigned char data_send_to_host_temp[20] = {0x00};
+static unsigned char data_send_to_host[20] = { 0x00 };  /* using the variant have to set zero , in the after assign the value */
+static unsigned char data_send_to_host_temp[20] = { 0x00 };
+static unsigned char ps3_data_send_to_host[49] = { 0x00 };
+static unsigned char ps3_data_send_to_host_temp[49] = { 0x00 };
 
 #if READ_KEY
 static volatile unsigned char my_key_val_1 = 0; // IO_PORTA_08
@@ -128,6 +136,8 @@ static volatile unsigned char R_1_io_key = 0; // IO_PORTB_07
 static volatile unsigned char start_io_key = 0;   // IO_PORTC_00
 static volatile unsigned char back_io_key = 0;    // IO_PORTC_07
 static volatile unsigned char XboxBar_io_key = 0; // IO_PORTC_01
+
+static volatile unsigned char ps_key = 0;
 #endif
 
 #if LEFT_ROCKER
@@ -136,8 +146,8 @@ static volatile int my_rocker_ad_key_y = 0; // ADC2, IO_PORTA_06
 #endif
 
 #if RIGHT_ROCKER
-static volatile int R_rocker_ad_key_x = 0; // ADC3, IO_PORTB_01
-static volatile int R_rocker_ad_key_y = 0; // ADC5, IO_PORTB_03
+static volatile int R_rocker_ad_key_x = 0; // ADC5, IO_PORTB_01
+static volatile int R_rocker_ad_key_y = 0; // ADC6, IO_PORTB_03
 #endif
 
 #if TRIGGER
@@ -148,17 +158,19 @@ static volatile int L_trigger_temp = 0;
 
 #if RIGHT_TRIGGER
 static volatile int R_trigger_ad_key = 0; // ADC9, IO_PORTB_10
-static volatile int R_trigger_temp = 0;
+static int R_trigger_temp = 0;
 #endif /* right trigger */
 #endif /* trigger */
 
 #if PWM_MOTOR
 #if LEFT_MOTOR
 static int trigger_value_L = 0;
+static int L_shake_time = 0;
 #endif /* left motor */
 
 #if RIGHT_MOTOR
 static int trigger_value_R = 0;
+static volatile int R_shake_time = 0;
 #endif /* right motor */
 #endif /* PWM motor */
 
@@ -253,30 +265,6 @@ static inline my_node_init(struct keys_info_node this_node)
 
 #if 0
 volatile struct sys_event my_key_event;             //will send the key_event
-void my_send_ADkeyX_event(void)
-{
-    my_key_event.type           = 0x0001;             //key_event 0x0001,
-    my_key_event.u.key.event    = 1;
-    my_key_event.u.key.type     = 0;
-    if( (DEADBAND_P1 >= my_rocker_ad_key_x) || (DEADBAND_P2 <= my_rocker_ad_key_x) )
-    {
-        my_key_event.u.key.type     = 1;
-        my_key_event.u.key.value    = my_rocker_ad_key_x;
-        sys_event_notify(&my_key_event);
-    }
-}
-void my_send_ADkeyY_event(void)
-{
-    my_key_event.type           = 0x0001;             //key_event 0x0001,
-    my_key_event.u.key.event    = 1;
-    my_key_event.u.key.type     = 0;
-    if( (DEADBAND_P1 >= my_rocker_ad_key_y) || (DEADBAND_P2 <= my_rocker_ad_key_y) )
-    {
-        my_key_event.u.key.type = 2;
-        my_key_event.u.key.value = my_rocker_ad_key_y;
-        sys_event_notify(&my_key_event);
-    }
-}
 void my_send_IOkey_event(void)
 {
     my_key_event.type           = 0x0001;             //key_event 0x0001,
@@ -286,17 +274,18 @@ void my_send_IOkey_event(void)
     sys_event_notify(&my_key_event);
 }
 #endif // disable send system event
-
-static inline unsigned int xbox360_tx_data(const usb_dev usb_id, const u8 *buffer, unsigned int len)
+static unsigned char motor_data[8];
+static inline unsigned int USB_TX_data(const usb_dev usb_id, const u8 *buffer, unsigned int len)
 {
-    return usb_g_intr_write(usb_id, 0x01, buffer, len); /* 0x01 is IN endpoint */
+    int ret = usb_g_intr_write(usb_id, 0x01, buffer, len); /* 0x01 is IN endpoint */
+    return ret;
 }
 
 /* merge io key , 'key' value is one or zero only*/
 static inline unsigned char merge_value(unsigned char all_key, unsigned char key, unsigned int bit)
 {
     if (key != 1 && key != 0)
-        return 0;
+        return all_key;
     if (key == 1)
         return all_key |= (1 << bit);
     if (key == 0)
@@ -324,7 +313,7 @@ static inline void send_data_to_host(void)
     {
 #endif
         if (register_temp)
-            xbox360_tx_data(usbfd, data_send_to_host, 20);
+            USB_TX_data(usbfd, data_send_to_host, sizeof(data_send_to_host));
 
 #if MOVEMENTS_SEND
         for (int i = 0; i < 20; i++)
@@ -332,15 +321,54 @@ static inline void send_data_to_host(void)
     }
 #endif
 }
+static inline void ps3_send_to_host(void)
+{
+    unsigned int register_temp = JL_USB->CON0;
+    register_temp = ((register_temp << 18) >> 31); // 13th bit, SOF_PND
+    if (register_temp)
+        USB_TX_data(usbfd, ps3_data_send_to_host, sizeof(ps3_data_send_to_host));
 
+#if PS3_KEY_PRINT
+
+    if ((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)
+    {
+        extern unsigned char ps3_read_ep[64];;
+        timer_send_flag = 1;
+        //mem_stats();    // 实时查看RAM
+        printf("[2]-> %x, [3]-> %x, [4]-> %x, %d", ps3_data_send_to_host[2], ps3_data_send_to_host[3], ps3_data_send_to_host[4], ps3_read_ep[4] * 50);
+        timer_send_flag = 0;
+    }
+    //unsigned char send_flag = 0;
+    //unsigned int register_temp = JL_USB->CON0;
+    //register_temp = ((register_temp << 18) >> 31); // 13th bit, SOF_PND
+    //for (int i = 0; i < 49; i++)
+    //{
+    //    if (ps3_data_send_to_host_temp[i] == ps3_data_send_to_host[i])
+    //        send_flag++;
+    //    if (ps3_data_send_to_host_temp[i] != ps3_data_send_to_host[i])
+    //        send_flag--;
+    //    if (send_flag == 49)
+    //        return;
+    //}
+    //if (send_flag < 49)
+    //{
+    //    if (register_temp)
+    //        USB_TX_data(usbfd, ps3_data_send_to_host, sizeof(ps3_data_send_to_host));
+    //}
+#endif // PS3_KEY_PRINT
+}
+
+/***************************************** xbox360(PC) function *****************************************/
 void my_read_key(void)
 {
 #if FUNC_TIMESTAMP
+    timer_send_flag = 1;
     while (count_all_func[2])
     {
         count_all_func[2] = 0;
         printf("------ %s -- start\n", __func__);
     }
+    timer_send_flag = 0;
 #endif
 
 #if READ_KEY
@@ -377,7 +405,7 @@ void my_read_key(void)
             key_start_press = 1;
         }
     }
-    
+
 #endif
 
 
@@ -647,22 +675,25 @@ void my_read_key(void)
 #endif
 
 #if FUNC_TIMESTAMP
+    timer_send_flag = 1;
     while (count_all_func[3])
     {
         count_all_func[3] = 0;
         printf("------ %s -- end\n", __func__);
     }
+    timer_send_flag = 0;
 #endif
 }
-
 void read_trigger_value(void)
 {
 #if FUNC_TIMESTAMP
+    timer_send_flag = 1;
     while (count_all_func[4])
     {
         count_all_func[4] = 0;
         printf("------ %s -- start\n", __func__);
     }
+    timer_send_flag = 0;
 #endif
 
 #if TRIGGER /* trigger */
@@ -777,22 +808,25 @@ void read_trigger_value(void)
 #endif /* trigger */
 
 #if FUNC_TIMESTAMP
+    timer_send_flag = 1;
     while (count_all_func[5])
     {
         count_all_func[5] = 0;
         printf("------ %s -- end\n", __func__);
     }
+    timer_send_flag = 0;
 #endif
 }
-
 void left_read_rocker(void)
 {
 #if FUNC_TIMESTAMP
+    timer_send_flag = 1;
     while (count_all_func[6])
     {
         count_all_func[6] = 0;
         printf("------ %s -- start\n", __func__);
     }
+    timer_send_flag = 0;
 #endif
 
     /* Left */
@@ -859,7 +893,6 @@ void left_read_rocker(void)
         {
             data_send_to_host[6] = 0x00; // left rocker
             data_send_to_host[7] = 0x80;
-            ;
         }
         if (L_X_plus == 0 && L_X_minus != 0 && L_X_minus > 0x80)
         {
@@ -906,14 +939,15 @@ void left_read_rocker(void)
 #endif /* left rocker value buffer */
 
 #if FUNC_TIMESTAMP
+    timer_send_flag = 1;
     while (count_all_func[7])
     {
         count_all_func[7] = 0;
         printf("------ %s -- end\n", __func__);
     }
+    timer_send_flag = 0;
 #endif
 }
-
 void right_read_rocker(void)
 {
 #if FUNC_TIMESTAMP
@@ -1032,22 +1066,25 @@ void right_read_rocker(void)
 #endif /* right rocker value buffer */
 
 #if FUNC_TIMESTAMP
+    timer_send_flag = 1;
     while (count_all_func[9])
     {
         count_all_func[9] = 0;
         printf("------ %s -- end\n", __func__);
     }
+    timer_send_flag = 0;
 #endif
 }
-
 void my_led_function(void)
 {
 #if FUNC_TIMESTAMP
+    timer_send_flag = 1;
     while (count_all_func[0])
     {
         count_all_func[0] = 0;
         printf("------ %s -- start\n", __func__);
     }
+    timer_send_flag = 0;
 #endif
 
     // 清除初始化的占空比值 Clear the initialised duty cycle value
@@ -1112,15 +1149,16 @@ void my_led_function(void)
 #endif
 
 #if FUNC_TIMESTAMP
+    timer_send_flag = 1;
     while (count_all_func[1])
     {
         count_all_func[1] = 0;
         printf("------ %s -- end \n", __func__);
     }
+    timer_send_flag = 0;
 #endif
 }
-
-void connect_flicker(void)
+void xbox360_connect_flicker(void)
 {
     if (player_flicker_time == 1 && player_IO_status == 1)
     {
@@ -1181,15 +1219,10 @@ void connect_flicker(void)
     break;
     default:
     {
-        if ((tcc_conut_led % (240 / LED_TCC_TIMER)) == 0)
-        {
-            printf("____---- %s ----default____\n", __func__);
-        }
     }
     break;
     }
 }
-
 void records_movement(void)
 {
 #if RECORD_MOVEMENT
@@ -1266,7 +1299,7 @@ void records_movement(void)
                         goto length_add;
                     reappear_times_temp[records_length] = (*((unsigned short*)records_keys_point + 1 + (2 * records_length))); // 给临时时间记录赋值
                 }
-                
+
             }
             else
             {
@@ -1297,7 +1330,7 @@ void records_movement(void)
             printf("---- record end ----");
 
             // 按键按下记录清零
-            records_movement_key = 0;   
+            records_movement_key = 0;
             key_start_press = 0;
 
             gpio_direction_output(record_player_led, 1);    // 结束记录状态指示灯常亮
@@ -1397,9 +1430,371 @@ void records_movement(void)
 #endif
     return;
 }
+/*****************************************************************************************************/
+
+/***************************************** PS3 function *****************************************/
+void ps3_read_key(void)
+{
+
+#if READ_KEY
+    a_key_val = (gpio_read(IO_PORTB_09)) ^ 0x01;
+    b_key_val = (gpio_read(IO_PORTB_06)) ^ 0x01;
+    x_key_val = (gpio_read(IO_PORTB_11)) ^ 0x01;
+    y_key_val = (gpio_read(IO_PORTB_04)) ^ 0x01;
+
+    my_key_val_4 = (gpio_read(IO_PORTA_08)) ^ 0x01; // ↑
+    my_key_val_3 = (gpio_read(IO_PORTA_11)) ^ 0x01; // ↓
+    my_key_val_1 = (gpio_read(IO_PORTA_12)) ^ 0x01; // ←
+    my_key_val_2 = (gpio_read(IO_PORTA_14)) ^ 0x01; // →
+
+    start_io_key = (gpio_read(IO_PORTC_00)) ^ 0x01;
+    back_io_key = (gpio_read(IO_PORTC_07)) ^ 0x01;
+
+    L_rocker_io_key = (gpio_read(IO_PORTA_07)) ^ 0x01;
+    R_rocker_io_key = (gpio_read(IO_PORTB_02)) ^ 0x01;
+
+    L_1_io_key = (gpio_read(IO_PORTB_05)) ^ 0x01;
+    R_1_io_key = (gpio_read(IO_PORTB_07)) ^ 0x01;
+
+    ps_key = (gpio_read(IO_PORTC_05)) ^ 0x01;
+#endif
+
+#if MERGE_KEY
+    io_key_status = 0x00;                                           /* using the variant have to set zero , in the after assign the value*/
+    io_key_status = merge_value(io_key_status, start_io_key, 0);    // start
+    io_key_status = merge_value(io_key_status, L_rocker_io_key, 1);
+    io_key_status = merge_value(io_key_status, R_rocker_io_key, 2);
+    io_key_status = merge_value(io_key_status, back_io_key, 3);     // select
+    io_key_status = merge_value(io_key_status, my_key_val_1, 4);    // ↑
+    io_key_status = merge_value(io_key_status, my_key_val_2, 5);    // →
+    io_key_status = merge_value(io_key_status, my_key_val_3, 6);    // ↓
+    io_key_status = merge_value(io_key_status, my_key_val_4, 7);    // ←
+    ps3_data_send_to_host[2] = io_key_status;
+    ps3_data_send_to_host[14] = my_key_val_1 ? 0xff : 0;    // ↑ ADC value
+    ps3_data_send_to_host[15] = my_key_val_4 ? 0xff : 0;    // → ADC value
+    ps3_data_send_to_host[16] = my_key_val_2 ? 0xff : 0;    // ↓ ADC value
+    ps3_data_send_to_host[17] = my_key_val_3 ? 0xff : 0;    // ← ADC value
+
+
+    io_key_status = 0x00;                                           /* using the variant have to set zero , in the after assign the value*/
+    L_trigger_ad_key = adc_get_value(8);
+    int ret_left = (L_trigger_ad_key > TRIGGER_PRESS_VAL) ? 1 : 0;  // 左扳机有按下1, 没有按下0
+    io_key_status = merge_value(io_key_status, ret_left, 0);
+
+    R_trigger_ad_key = adc_get_value(9);
+    int ret_right = (R_trigger_ad_key > TRIGGER_PRESS_VAL) ? 1 : 0; // 右扳机有按下1, 没有按下0
+    io_key_status = merge_value(io_key_status, ret_right, 1);
+
+    io_key_status = merge_value(io_key_status, L_1_io_key, 2);     //  left_1
+    io_key_status = merge_value(io_key_status, R_1_io_key, 3);     // right_1
+    io_key_status = merge_value(io_key_status, y_key_val, 4);      // △
+    io_key_status = merge_value(io_key_status, b_key_val, 5);      // ○
+    io_key_status = merge_value(io_key_status, x_key_val, 6);      // ×
+    io_key_status = merge_value(io_key_status, a_key_val, 7);      // □
+    ps3_data_send_to_host[3] = io_key_status;   // 只有键值同样也能识别, 区别可能在于在游戏中无法触发, 可能需要额外的ADC值
+    ps3_data_send_to_host[20] = L_1_io_key ? 0xff : 0;  // L1, ADC value
+    ps3_data_send_to_host[21] = R_1_io_key ? 0xff : 0;  // R1, ADC value
+    ps3_data_send_to_host[24] = a_key_val ? 0xff : 0;   // △, ADC value
+    ps3_data_send_to_host[23] = b_key_val ? 0xff : 0;   // ○, ADC value
+    ps3_data_send_to_host[25] = x_key_val ? 0xff : 0;   // ×, ADC value
+    ps3_data_send_to_host[22] = y_key_val ? 0xff : 0;   // □, ADC value
+
+
+    io_key_status = 0x00;                                           /* using the variant have to set zero , in the after assign the value*/
+    io_key_status = merge_value(io_key_status, ps_key, 0);
+    ps3_data_send_to_host[4] = io_key_status;
+
+
+    /*extern unsigned char ps3_player_ID;
+    ps3_data_send_to_host[0] = ps3_player_ID;*/
+#endif
+
+
+}
+void ps3_read_trigger(void)
+{
+#if TRIGGER
+    L_trigger_ad_key = adc_get_value(8);
+    R_trigger_ad_key = adc_get_value(9);
+#if LEFT_TRIGGER /* left */
+    if (L_trigger_ad_key > TRIGGER_PRESS_VAL)
+    {
+        int send_condition = L_trigger_temp - (L_trigger_ad_key - TRIGGER_INIT_VAL); // jitter judgement
+        if (send_condition > 4 || send_condition < (-4))
+        {                                                                 // eliminate jitter
+            ps3_data_send_to_host[18] = (L_trigger_ad_key - TRIGGER_INIT_VAL); // left trigger, L2
+            L_trigger_temp = ps3_data_send_to_host[18];
+        }
+
+        if ((L_trigger_ad_key - TRIGGER_INIT_VAL) > 0xff)
+        {
+            ps3_data_send_to_host[18] = 0xff;
+            L_trigger_temp = 0xff;
+        }
+    }
+    else
+    {
+        ps3_data_send_to_host[18] = 0x00;
+        L_trigger_temp = 0x00;
+    }
+
+#endif
+#if RIGHT_TRIGGER /* right */
+    if (R_trigger_ad_key > TRIGGER_PRESS_VAL)
+    {
+        int send_condition = R_trigger_temp - (R_trigger_ad_key - TRIGGER_INIT_VAL); // jitter judgement
+        if (send_condition > 5 || send_condition < (-5))
+        {                                                                 // eliminate jitter
+            ps3_data_send_to_host[19] = (R_trigger_ad_key - TRIGGER_INIT_VAL); // right trigger, R2
+            R_trigger_temp = ps3_data_send_to_host[19];
+        }
+
+        if ((R_trigger_ad_key - TRIGGER_INIT_VAL) > 0xff)
+        {
+            ps3_data_send_to_host[19] = 0xff;
+            R_trigger_temp = 0xff;
+        }
+    }
+    else
+    {
+        ps3_data_send_to_host[19] = 0x00;
+        R_trigger_temp = 0x00;
+    }
+
+#endif
+#endif
+}
+void ps3_left_read_rocker(void)
+{
+    unsigned char L_X_plus = 0;  // X+
+    unsigned char L_X_minus = 0; // X-
+    unsigned char L_Y_plus = 0;  // Y+
+    unsigned char L_Y_minus = 0; // Y-
+
+#if LEFT_ROCKER
+
+    /* parametric is adc CHANNEL */
+    my_rocker_ad_key_x = adc_get_value(1); // ADC1
+    my_rocker_ad_key_y = adc_get_value(2); // ADC2
+
+
+    if ((PS3_DEADBAND_X2 <= my_rocker_ad_key_x) || (PS3_DEADBAND_X1 >= my_rocker_ad_key_x))
+    {
+#if LEFT_ROCKER_BUFFER /* left rocker value buffer */
+        if (PS3_DEADBAND_X2 <= my_rocker_ad_key_x)  // 0x7f~0xff, X+
+        {
+            float temp_X_plus_f = my_rocker_ad_key_x / 4.0;     //1023/4=255.75
+            L_X_plus = (unsigned char)temp_X_plus_f;
+            L_X_minus = 0;
+#if LEFT_ROCKER_X_AXIS /* X axis */
+            ps3_data_send_to_host[6] = L_X_plus;
+#endif
+        }
+        if (PS3_DEADBAND_X1 >= my_rocker_ad_key_x)  // 0x7f~0x00, X-
+        {
+            float temp_X_minus_f = my_rocker_ad_key_x / 3.59;    // 460/3.59=128.133...
+            L_X_minus = (unsigned char)temp_X_minus_f;
+            L_X_plus = 0;
+#if LEFT_ROCKER_X_AXIS /* X axis */
+            ps3_data_send_to_host[6] = L_X_minus;
+#endif
+        }
+#endif
+    }
+    else
+    {
+        ps3_data_send_to_host[6] = 0x7f;
+    }
+
+
+    if ((PS3_DEADBAND_X2 <= my_rocker_ad_key_y) || (PS3_DEADBAND_X1 >= my_rocker_ad_key_y)) // PS3的Y轴输入与AD值反转
+    {
+#if LEFT_ROCKER_BUFFER /* left rocker value buffer */
+        if (PS3_DEADBAND_X2 <= my_rocker_ad_key_y)  // Y-
+        {
+            float temp_Y_plus_f = my_rocker_ad_key_y / 4.0;
+            L_Y_plus = (unsigned char)temp_Y_plus_f;
+            L_Y_minus = 0;
+#if LEFT_ROCKER_Y_AXIS /* Y axis */
+            ps3_data_send_to_host[7] = 0xff - L_Y_plus;
+#endif
+        }
+        if (PS3_DEADBAND_X1 >= my_rocker_ad_key_y)  // Y+
+        {
+            float temp_Y_minus_f = my_rocker_ad_key_y / 3.59;
+            L_Y_minus = (unsigned char)temp_Y_minus_f;
+            L_Y_plus = 0;
+#if LEFT_ROCKER_Y_AXIS /* Y axis */
+            ps3_data_send_to_host[7] = 0x7f + (0x80 - L_Y_minus);
+#endif
+        }
+#endif /* left rocker value buffer */
+    }
+    else
+    {
+        ps3_data_send_to_host[7] = 0x7f;
+    }
+
+#endif
+#if LEFT_ROCKER_PRINT
+    if ((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)
+    {
+        timer_send_flag = 1;
+        printf("LY: %d, LX: %d    ADC_Y: %d, ADC_X: %d", ps3_data_send_to_host[7], ps3_data_send_to_host[6], my_rocker_ad_key_y, my_rocker_ad_key_x);
+        timer_send_flag = 0;
+    }
+#endif
+}
+void ps3_right_read_rocker(void)
+{
+    unsigned char R_X_plus = 0;  // X+
+    unsigned char R_X_minus = 0; // X-
+    unsigned char R_Y_plus = 0;  // Y+
+    unsigned char R_Y_minus = 0; // Y-
+
+#if RIGHT_ROCKER
+
+    /* parametric is adc CHANNEL */
+    R_rocker_ad_key_x = adc_get_value(5); // ADC5
+    R_rocker_ad_key_y = adc_get_value(6); // ADC6
+
+
+    if ((PS3_DEADBAND_X2 <= R_rocker_ad_key_x) || (PS3_DEADBAND_X1 >= R_rocker_ad_key_x))
+    {
+#if RIGHT_ROCKER_BUFFER /* left rocker value buffer */
+        if (PS3_DEADBAND_X2 <= R_rocker_ad_key_x)  // 0x7f~0xff, X+
+        {
+            float temp_X_plus_f = R_rocker_ad_key_x / 4.0;     //1023/4=255.75
+            R_X_plus = (unsigned char)temp_X_plus_f;
+            R_X_minus = 0;
+#if RIGHT_ROCKER_X_AXIS /* X axis */
+            ps3_data_send_to_host[8] = R_X_plus;
+#endif
+        }
+        if (PS3_DEADBAND_X1 >= R_rocker_ad_key_x)  // 0x7f~0x00, X-
+        {
+            float temp_X_minus_f = R_rocker_ad_key_x / 3.59;    // 460/3.59=128.133...
+            R_X_minus = (unsigned char)temp_X_minus_f;
+            R_X_plus = 0;
+#if RIGHT_ROCKER_X_AXIS /* X axis */
+            ps3_data_send_to_host[8] = R_X_minus;
+#endif
+        }
+#endif
+    }
+    else
+    {
+        ps3_data_send_to_host[8] = 0x7f;
+    }
+
+
+    if ((PS3_DEADBAND_X2 <= R_rocker_ad_key_y) || (PS3_DEADBAND_X1 >= R_rocker_ad_key_y)) // PS3的Y轴输入与AD值反转
+    {
+#if RIGHT_ROCKER_BUFFER /* left rocker value buffer */
+        if (PS3_DEADBAND_X2 <= R_rocker_ad_key_y)  // Y-
+        {
+            float temp_Y_plus_f = R_rocker_ad_key_y / 4.0;
+            R_Y_plus = (unsigned char)temp_Y_plus_f;
+            R_Y_minus = 0;
+#if RIGHT_ROCKER_Y_AXIS /* Y axis */
+            ps3_data_send_to_host[9] = 0xff - R_Y_plus;
+#endif
+        }
+        if (PS3_DEADBAND_X1 >= R_rocker_ad_key_y)  // Y+
+        {
+            float temp_Y_minus_f = R_rocker_ad_key_y / 3.59;
+            R_Y_minus = (unsigned char)temp_Y_minus_f;
+            R_Y_plus = 0;
+#if RIGHT_ROCKER_Y_AXIS /* Y axis */
+            ps3_data_send_to_host[9] = 0x7f + (0x80 - R_Y_minus);
+#endif
+        }
+#endif /* left rocker value buffer */
+    }
+    else
+    {
+        ps3_data_send_to_host[9] = 0x7f;
+    }
+
+#endif
+#if RIGHT_ROCKER_PRINT
+    if ((tcc_count % (510 / MAIN_TCC_TIMER)) == 0)
+    {
+        timer_send_flag = 1;
+        printf("RY: %d, RX: %d    ADC_Y: %d, ADC_X: %d", ps3_data_send_to_host[9], ps3_data_send_to_host[8], R_rocker_ad_key_y, R_rocker_ad_key_x);
+        timer_send_flag = 0;
+    }
+#endif
+}
+void ps3_player_led(void)
+{
+    extern unsigned char ps3_player_ID;
+    switch (ps3_player_ID)
+    {
+    case 1: {
+        gpio_direction_output(IO_PORTA_03, 1);
+        gpio_direction_output(IO_PORTA_02, 0);
+        gpio_direction_output(IO_PORTA_01, 0);
+        gpio_direction_output(IO_PORTA_04, 0);
+    }break;
+    case 2: {
+        gpio_direction_output(IO_PORTA_03, 0);
+        gpio_direction_output(IO_PORTA_02, 1);
+        gpio_direction_output(IO_PORTA_01, 0);
+        gpio_direction_output(IO_PORTA_04, 0);
+    }break;
+    case 3: {
+        gpio_direction_output(IO_PORTA_03, 0);
+        gpio_direction_output(IO_PORTA_02, 0);
+        gpio_direction_output(IO_PORTA_01, 1);
+        gpio_direction_output(IO_PORTA_04, 0);
+    }break;
+    case 4: {
+        gpio_direction_output(IO_PORTA_03, 0);
+        gpio_direction_output(IO_PORTA_02, 0);
+        gpio_direction_output(IO_PORTA_01, 0);
+        gpio_direction_output(IO_PORTA_04, 1);
+    }break;
+    case 5: {
+        gpio_direction_output(IO_PORTA_03, 1);
+        gpio_direction_output(IO_PORTA_02, 0);
+        gpio_direction_output(IO_PORTA_01, 0);
+        gpio_direction_output(IO_PORTA_04, 1);
+    }break;
+    case 6: {
+        gpio_direction_output(IO_PORTA_03, 0);
+        gpio_direction_output(IO_PORTA_02, 1);
+        gpio_direction_output(IO_PORTA_01, 0);
+        gpio_direction_output(IO_PORTA_04, 1);
+    }break;
+    case 7: {
+        gpio_direction_output(IO_PORTA_03, 0);
+        gpio_direction_output(IO_PORTA_02, 0);
+        gpio_direction_output(IO_PORTA_01, 1);
+        gpio_direction_output(IO_PORTA_04, 1);
+    }break;
+    default: {
+        gpio_direction_output(IO_PORTA_03, 0);
+        gpio_direction_output(IO_PORTA_02, 0);
+        gpio_direction_output(IO_PORTA_01, 0);
+        gpio_direction_output(IO_PORTA_04, 0);
+    }break;
+    }
+}
+void ps3_PWM_shake(void)/**/
+{  
+    extern u8 ps3_read_ep[64];  // 獲取主機所發送的震動值
+    
+    timer_send_flag = 1;    // 实际中出现了任务队列溢出的情况, 试图关闭定时器改善超时导致OS重启
+    mcpwm_set_duty(pwm_ch1, pwm_timer1, (ps3_read_ep[4] * 50));
+    mcpwm_set_duty(pwm_ch0, pwm_timer0, (ps3_read_ep[2] * 50));
+    timer_send_flag = 0;   
+}
+/*****************************************************************************************************/
 
 void *my_task(void *p_arg)
 {
+    extern unsigned char usb_connect_timeout_flag;  // from task_pc.c
     int msg[8]; // in the array, recive task queue
     while (1)
     {
@@ -1412,30 +1807,82 @@ void *my_task(void *p_arg)
         {
         case MAIN_TCC_TASK:
         {
-            my_read_key();
-            records_movement();
-            left_read_rocker();
-            right_read_rocker();
-            read_trigger_value();
-            send_data_to_host();
+            //gpio_direction_output(IO_PORTA_01, 1);
+            if (usb_connect_timeout_flag == 1)
+            {
+                my_read_key();
+                records_movement();
+                left_read_rocker();
+                right_read_rocker();
+                read_trigger_value();
+                send_data_to_host();              
+            }
+            if (usb_connect_timeout_flag == 2)
+            {
+                ps3_read_key();
+                ps3_left_read_rocker();
+                ps3_right_read_rocker();
+                ps3_read_trigger();
+                ps3_player_led();
+                ps3_send_to_host();
+            }
+            //gpio_direction_output(IO_PORTA_01, 0);
 #if CHECK_MEMORY
-            if((tcc_count % (6000 / MAIN_TCC_TIMER)) == 0)
+            if ((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)
+            {
+                timer_send_flag = 1;
                 mem_stats();    // 实时查看RAM
+                timer_send_flag = 0;
+            }
 #endif
-        }
-        break;
+        }break;
         case BREATHE_LED_TASK:
         {
-             my_led_function();
-            if (exit_flicker)
-                break;
-            connect_flicker();
-        }
-        break;
+            if (usb_connect_timeout_flag == 1)
+            {
+                my_led_function();
+                if (exit_flicker)
+                    break;
+                xbox360_connect_flicker();
+            }
+            if (usb_connect_timeout_flag == 2)
+            {
+                ps3_PWM_shake();
+            }
+        }break;
         case SPECIAL_FUNCTIONS:
         {
-        }
+            extern u8 usb_connect_timeout_flag;
+            if (!usb_connect_timeout_flag)
+            {
+                printf("file:%s, line:%d", __FILE__, __LINE__);
+                //
+                //usb_g_hold(usbfd);
+                //usb_setup_release(usbfd);
+                usb_timeout ^= 1;
+                usb_iomode(usb_timeout);
+                //os_time_dly(100);
 
+                //ret = usb_release(usbfd);    // 软件模拟拔插
+                printf(" RUN USB release ! ! !");
+                usb_connect_timeout_flag = 2;
+
+                if(!usb_timeout)
+                {
+                    usb_stop();
+                    usb_g_hold(usbfd);
+                    usb_var_release(usbfd);
+                    usb_h_sie_reset(usbfd);
+                    usb_setup_release(usbfd);
+                    usb_io_reset(usbfd);
+                    usb_start();
+                }
+
+                //usbstack_exit();
+                //usbstack_init();
+                //usb_start();    // 重新开始执行usb启动函数
+            }
+        }break;
         default:
             break;
         }
@@ -1646,9 +2093,9 @@ void my_PWM_output_init(void)
         log_print(__LOG_INFO, NULL, "this PWM_modle enable\r\n");
 #endif
     printf("---------- %s ----------\n", __func__);
-#if 1
+#if PWM_INIT
     struct pwm_platform_data pwm_motor_output_init = {0X00};
-#if 1
+#if PWM_INIT
     pwm_motor_output_init.complementary_en = 1;       // 两个IO输出波形同步
     pwm_motor_output_init.frequency = 10000;          // 10KHz
     pwm_motor_output_init.pwm_timer_num = pwm_timer0; // 时间基准, PWM定时器0
@@ -1662,7 +2109,7 @@ void my_PWM_output_init(void)
     mcpwm_init(&pwm_motor_output_init); // PS: channel >= 3, not support output_channel
     printf("---------- >>> mcpwm_init\n");
 #endif
-#if 1
+#if PWM_INIT
     pwm_motor_output_init.h_pin = IO_PORTB_00;
     pwm_motor_output_init.h_pin_output_ch_num = 1;
     pwm_motor_output_init.pwm_timer_num = pwm_timer1;          // 时间基准, PWM定时器1
@@ -1684,9 +2131,14 @@ void my_PWM_output_init(void)
 
 static inline void *my_timer_task(void *p_arg)
 {
+    extern u8 usb_connect_timeout_flag;         // from task_pc.c, 手柄平台判断
+    extern unsigned char get_report_f7_FLAG;    // from hid.c, PS3报表发送判断
     int ret = 0;
-    if(!timer_send_flag)    // 当VM在读写的时候使定时器不发送任务队列
+    if ((!timer_send_flag) && get_report_f7_FLAG && usb_connect_timeout_flag == 2)    // timer_send_flag: 当VM在读写的时候使定时器不发送任务队列
         ret = os_taskq_post_type(MY_TASK_NAME, MAIN_TCC_TASK, 0, NULL);
+    else if (usb_connect_timeout_flag == 1 && (!timer_send_flag))
+        ret = os_taskq_post_type(MY_TASK_NAME, MAIN_TCC_TASK, 0, NULL);
+
     if (ret != OS_NO_ERR)   // 0~65, from "os_error.h"
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
 
@@ -1695,9 +2147,14 @@ static inline void *my_timer_task(void *p_arg)
 }
 static inline void *led_timer_task(void *p_arg)
 {
+    extern u8 usb_connect_timeout_flag;         // from task_pc.c, 手柄平台判断
+    extern unsigned char get_report_f7_FLAG;    // from hid.c, PS3报表发送判断
     int ret = 0;
-    if(!timer_send_flag)    // 当VM在读写的时候使定时器不发送任务队列
+    if ((!timer_send_flag) && get_report_f7_FLAG && usb_connect_timeout_flag == 2)    // timer_send_flag: 当VM在读写的时候使定时器不发送任务队列
         ret = os_taskq_post_type(MY_TASK_NAME, BREATHE_LED_TASK, 0, NULL);
+    else if (usb_connect_timeout_flag == 1 && (!timer_send_flag))
+        ret = os_taskq_post_type(MY_TASK_NAME, BREATHE_LED_TASK, 0, NULL);
+
     if (ret != OS_NO_ERR)   // 0~65, from "os_error.h"
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    BREATHE_LED_TASK return value : %d\n", ret);
 
@@ -1716,22 +2173,35 @@ static inline void *SpecialFunc_timer_task(void *p_arg)
 
 void my_task_init(void)
 {
-    printf("__________ %s __________\n", __func__);
+    printf("__________ %s __________, %x\n", __func__, JL_USB->CON0);
     int err;
     // gpio_direction_output(IO_PORTA_03, 1);//set this IO output
 
     my_button_init();
     my_PWM_output_init();
-
-    extern unsigned char temp_list[2][8];
-    extern unsigned char my_device_type[2];   // from descriptor.c
-    printf("device_type[0]: %x", my_device_type[0]);
-    printf("ep0 temp_list >> %x %x %x %x %x %x %x %x ", temp_list[0][0], temp_list[0][1], temp_list[0][2], temp_list[0][3], temp_list[0][4], temp_list[0][5], temp_list[0][6], temp_list[0][7]);
-    printf("ep0 temp_list >> %x %x %x %x %x %x %x %x ", temp_list[1][0], temp_list[1][1], temp_list[1][2], temp_list[1][3], temp_list[1][4], temp_list[1][5], temp_list[1][6], temp_list[1][7]);
-
-
+    gpio_direction_output(IO_PORTA_03, 0);
+    gpio_direction_output(IO_PORTA_01, 0);
+    /* PC */
     data_send_to_host[1] = 0x14;    // 长度是固定的
     buf_point = records_keys_point; // 指向要被写入VM的数据
+
+    /* PS3 */
+    ps3_data_send_to_host[0] = 0x01;
+    ps3_data_send_to_host[29] = 0x03;
+    ps3_data_send_to_host[31] = 0x14;
+    ps3_data_send_to_host[32] = 0x00;
+    ps3_data_send_to_host[33] = 0x00;
+    ps3_data_send_to_host[34] = 0x00;
+    ps3_data_send_to_host[35] = 0x00;
+    ps3_data_send_to_host[36] = 0x23;
+    ps3_data_send_to_host[37] = 0x6d;
+    ps3_data_send_to_host[38] = 0x77;
+    ps3_data_send_to_host[39] = 0x01;
+    ps3_data_send_to_host[40] = 0x80;
+    ps3_data_send_to_host[45] = 0x01;
+    ps3_data_send_to_host[47] = 0x02;
+    ps3_data_send_to_host[48] = 0x00;
+
 
 #if SUCCESSIVE_PRESS
     float temp = frequency / 2.0;
@@ -1767,11 +2237,13 @@ void my_task_init(void)
 #endif
     unsigned int ep_temp = JL_USB->EP0_ADR;
     printf("[INFO] JL_USB->EP0_ADR: %X", ep_temp);
+
+
 #endif
 
 #if THREAD_CREATE
     /* create my task, remember do not set stack-size(stksize) too short. if send task queue ,do not set the queue-size(qsize) is zero */
-    err = os_task_create(my_task, NULL, 1, 256, 32, MY_TASK_NAME);
+    err = os_task_create(my_task, NULL, 1, 512, 32, MY_TASK_NAME);
     log_print(__LOG_INFO, NULL, "create my task ! ! !    ret = %d\n", err);
 
 #if MAIN_TIMER
