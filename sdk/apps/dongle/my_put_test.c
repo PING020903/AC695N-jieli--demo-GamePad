@@ -329,15 +329,17 @@ static inline void ps3_send_to_host(void)
         USB_TX_data(usbfd, ps3_data_send_to_host, sizeof(ps3_data_send_to_host));
 
 #if PS3_KEY_PRINT
+    //extern unsigned char ps3_read_ep[64];
+    //if (motor_data[1] != ps3_read_ep[4])  // 會導致卡住卡死
+    //{
 
-    if ((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)
-    {
-        extern unsigned char ps3_read_ep[64];;
-        timer_send_flag = 1;
-        //mem_stats();    // 实时查看RAM
-        printf("[2]-> %x, [3]-> %x, [4]-> %x, %d", ps3_data_send_to_host[2], ps3_data_send_to_host[3], ps3_data_send_to_host[4], ps3_read_ep[4] * 50);
-        timer_send_flag = 0;
-    }
+    //    timer_send_flag = 1;
+    //    //mem_stats();    // 实时查看RAM
+    //    printf("[2]-> %x, [3]-> %x, [4]-> %x, %x %x  %x %x", ps3_data_send_to_host[2], ps3_data_send_to_host[3], ps3_data_send_to_host[4],
+    //        ps3_read_ep[1], ps3_read_ep[2], ps3_read_ep[3], ps3_read_ep[4]);
+    //    ps3_read_ep[2] = motor_data[0];
+    //    ps3_read_ep[4] = motor_data[1];
+    //}
     //unsigned char send_flag = 0;
     //unsigned int register_temp = JL_USB->CON0;
     //register_temp = ((register_temp << 18) >> 31); // 13th bit, SOF_PND
@@ -1782,13 +1784,15 @@ void ps3_player_led(void)
     }
 }
 void ps3_PWM_shake(void)/**/
-{  
-    extern u8 ps3_read_ep[64];  // 獲取主機所發送的震動值
-    
-    timer_send_flag = 1;    // 实际中出现了任务队列溢出的情况, 试图关闭定时器改善超时导致OS重启
-    mcpwm_set_duty(pwm_ch1, pwm_timer1, (ps3_read_ep[4] * 50));
-    mcpwm_set_duty(pwm_ch0, pwm_timer0, (ps3_read_ep[2] * 50));
-    timer_send_flag = 0;   
+{
+    gpio_direction_output(IO_PORTA_01, 1);
+    extern u8 ps3_out_DMA[64];  // 獲取主機所發送的震動值
+
+    timer_send_flag = 0;    // 实际中出现了任务队列溢出的情况, 试图关闭定时器改善超时导致OS重启
+    mcpwm_set_duty(pwm_ch1, pwm_timer1, (ps3_out_DMA[5] * 100));
+    mcpwm_set_duty(pwm_ch0, pwm_timer0, (ps3_out_DMA[3] * 100));
+    timer_send_flag = 0;
+    gpio_direction_output(IO_PORTA_01, 0);
 }
 /*****************************************************************************************************/
 
@@ -1815,7 +1819,9 @@ void *my_task(void *p_arg)
                 left_read_rocker();
                 right_read_rocker();
                 read_trigger_value();
-                send_data_to_host();              
+                send_data_to_host();
+                if ((tcc_count % (1000 / MAIN_TCC_TIMER)) == 0)
+                    printf("---------- %s ---------- %d", __func__, usb_connect_timeout_flag);
             }
             if (usb_connect_timeout_flag == 2)
             {
@@ -1825,6 +1831,22 @@ void *my_task(void *p_arg)
                 ps3_read_trigger();
                 ps3_player_led();
                 ps3_send_to_host();
+                ps3_PWM_shake();
+                /*extern u8 ps3_out_DMA[64];
+                if ((tcc_count % (2000 / MAIN_TCC_TIMER)) == 0)
+                {
+                    timer_send_flag = 1;
+                    printf("OUT DMA DATA\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x,\
+ %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x", ps3_out_DMA[0], ps3_out_DMA[1],
+            ps3_out_DMA[2], ps3_out_DMA[3], ps3_out_DMA[4], ps3_out_DMA[5], ps3_out_DMA[6], ps3_out_DMA[7], ps3_out_DMA[8], ps3_out_DMA[9],
+            ps3_out_DMA[10], ps3_out_DMA[11], ps3_out_DMA[12], ps3_out_DMA[13], ps3_out_DMA[14], ps3_out_DMA[15], ps3_out_DMA[16], ps3_out_DMA[17],
+            ps3_out_DMA[18], ps3_out_DMA[19], ps3_out_DMA[20], ps3_out_DMA[21], ps3_out_DMA[22], ps3_out_DMA[23], ps3_out_DMA[24], ps3_out_DMA[25],
+            ps3_out_DMA[26], ps3_out_DMA[27], ps3_out_DMA[28], ps3_out_DMA[29], ps3_out_DMA[30], ps3_out_DMA[31], ps3_out_DMA[32], ps3_out_DMA[33],
+            ps3_out_DMA[34], ps3_out_DMA[35], ps3_out_DMA[36], ps3_out_DMA[37], ps3_out_DMA[38], ps3_out_DMA[39], ps3_out_DMA[40], ps3_out_DMA[41],
+            ps3_out_DMA[42], ps3_out_DMA[43], ps3_out_DMA[44], ps3_out_DMA[45], ps3_out_DMA[46], ps3_out_DMA[47], ps3_out_DMA[48], ps3_out_DMA[49]);
+                    printf("USBCON0: %x", JL_USB->CON0);
+                    timer_send_flag = 0;
+                }*/
             }
             //gpio_direction_output(IO_PORTA_01, 0);
 #if CHECK_MEMORY
@@ -1847,7 +1869,7 @@ void *my_task(void *p_arg)
             }
             if (usb_connect_timeout_flag == 2)
             {
-                ps3_PWM_shake();
+
             }
         }break;
         case SPECIAL_FUNCTIONS:
