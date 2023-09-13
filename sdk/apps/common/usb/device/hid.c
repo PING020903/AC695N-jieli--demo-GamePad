@@ -4,6 +4,7 @@
 #include "usb_config.h"
 
 #include "app_config.h"
+#include "generic/gpio.h"
 
 #ifdef TCFG_USB_SLAVE_USER_HID
 #undef TCFG_USB_SLAVE_HID_ENABLE
@@ -464,6 +465,7 @@ static const unsigned char ReportEF2[] = {
 static u8* ps3_ep_in_dma;
 static u8* ps3_ep_out_dma;
 u8 ps3_read_ep[64];
+u8 ps3_out_DMA[64];
 static unsigned char report_EF_flag[2] = { 0 };
 
 static void* ps3_report_point(int index)
@@ -528,10 +530,9 @@ static usb_interrupt ps3_rx_data(struct usb_device_t* usb_device, u32 ep)
 {
 	//log_debug("---------- %s ----------", __func__);
 	const usb_dev usb_id = usb_device2id(usb_device);
-	u32 rx_len = usb_g_intr_read(usb_id, ep, NULL, 64, 0);
+	u32 rx_len = usb_g_intr_read(usb_id, ep, ps3_out_DMA, 64, 0);
 
 	//ps3_tx_data(usb_device, ps3_ep_out_dma, rx_len);
-
 
 	//usb_g_intr_write(usb_id, 0x01, fraud_temp, 0x14);
 	//usb_g_intr_write(usb_id, 0x01, temp, 0x03);
@@ -542,14 +543,14 @@ static void ps3_endpoint_init(struct usb_device_t* usb_device, u32 itf)
 {
 	printf("---------- %s ----------\n", __func__);
 	const usb_dev usb_id = usb_device2id(usb_device);
-	memset(ps3_ep_in_dma, 0, MAXP_SIZE_HIDIN);
-	usb_g_ep_config(usb_id, (0x01 | 0x80), USB_ENDPOINT_XFER_INT, 0, ps3_ep_in_dma, MAXP_SIZE_HIDIN);
-	usb_enable_ep(usb_id, 1);
-
 	memset(ps3_ep_out_dma, 0, MAXP_SIZE_HIDOUT);
 	usb_g_ep_config(usb_id, (HID_EP_OUT), USB_ENDPOINT_XFER_INT, 1, ps3_ep_out_dma, MAXP_SIZE_HIDOUT);
 	usb_g_set_intr_hander(usb_id, (HID_EP_OUT), ps3_rx_data);
 	usb_enable_ep(usb_id, 2);
+
+	memset(ps3_ep_in_dma, 0, MAXP_SIZE_HIDIN);
+	usb_g_ep_config(usb_id, (0x01 | 0x80), USB_ENDPOINT_XFER_INT, 0, ps3_ep_in_dma, MAXP_SIZE_HIDIN);
+	usb_enable_ep(usb_id, 1);
 }
 static void ps3_reset_hander(struct usb_device_t* usb_device, u32 itf)
 {
@@ -565,6 +566,7 @@ unsigned char ps3_player_ID;
 //static unsigned char arr_OUTrecv[64];
 static u32 ps3_recv_output_report(struct usb_device_t* usb_device, struct usb_ctrlrequest* setup)
 {
+	gpio_direction_output(IO_PORTA_03, 1);
 	const usb_dev usb_id = usb_device2id(usb_device);
 	usb_read_ep0(usb_id, ps3_read_ep, MIN(sizeof(ps3_read_ep), setup->wLength));
 	//printf("USB_REQ_SET_REPORT %x, %x, %x", ps3_read_ep[4], ps3_read_ep[5], ps3_read_ep[6]);
@@ -598,6 +600,7 @@ static u32 ps3_recv_output_report(struct usb_device_t* usb_device, struct usb_ct
 		break;
 	}
 	ps3_player_ID = ID_Num;
+	gpio_direction_output(IO_PORTA_03, 0);
 	return  USB_EP0_STAGE_SETUP;
 }
 static u32 ps3_interface_hander(struct usb_device_t* usb_device, struct usb_ctrlrequest* setup)
