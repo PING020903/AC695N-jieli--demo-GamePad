@@ -1,4 +1,4 @@
-# AC695N-demo_xbox360_WindowsPC_only
+# AC695N-demo_gamepad, support PC and PS3
 基于杰理AC695N系列，AC6951C的游戏手柄控制器   
 将usb通讯抓包，模仿Xbox360对WindowsPC的通信   
 测试在WindowsPC中有反应、能用，但没做Xbox主机适配
