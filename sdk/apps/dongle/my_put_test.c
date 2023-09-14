@@ -298,7 +298,8 @@ static inline void send_data_to_host(void)
     unsigned char send_flag = 0;
 #endif
     unsigned int register_temp = JL_USB->CON0;
-    register_temp = ((register_temp << 18) >> 31); // 13th bit, SOF_PND
+    register_temp = register_temp << 18;
+    register_temp = register_temp >> 31; // 13th bit, SOF_PND
 #if MOVEMENTS_SEND
     for (int i = 0; i < 20; i++)
     {
@@ -324,7 +325,8 @@ static inline void send_data_to_host(void)
 static inline void ps3_send_to_host(void)
 {
     unsigned int register_temp = JL_USB->CON0;
-    register_temp = ((register_temp << 18) >> 31); // 13th bit, SOF_PND
+    register_temp = register_temp << 18;
+    register_temp = register_temp >> 31; // 13th bit, SOF_PND
     if (register_temp)
         USB_TX_data(usbfd, ps3_data_send_to_host, sizeof(ps3_data_send_to_host));
 
@@ -332,7 +334,7 @@ static inline void ps3_send_to_host(void)
     //extern unsigned char ps3_read_ep[64];
     //if (motor_data[1] != ps3_read_ep[4])  // 會導致卡住卡死
     //{
-
+    //    ps3_data_send_to_host[9];
     //    timer_send_flag = 1;
     //    //mem_stats();    // 实时查看RAM
     //    printf("[2]-> %x, [3]-> %x, [4]-> %x, %x %x  %x %x", ps3_data_send_to_host[2], ps3_data_send_to_host[3], ps3_data_send_to_host[4],
@@ -1361,12 +1363,21 @@ void records_movement(void)
             write_flag++;
             if (ret_w < 0 || write_flag >= 2)   // 写入失败, 失败次数大于3
             {
-                if(write_flag < 2)
+                if (write_flag < 2 && ret_w < 0)
+                {
                     goto try_again_write;
+                }
+                else if(write_flag < 2 && ret_w > 0)
+                {
+                    goto write_success;
+                }
                 else
+                {
                     printf("    VM write ret: %d, WRITE ERROR ! ! !", ret_w);
+                }
+                    
             }
-
+            write_success:
             timer_send_flag = 0;
 #endif
 
@@ -1473,9 +1484,9 @@ void ps3_read_key(void)
     io_key_status = merge_value(io_key_status, my_key_val_4, 7);    // ←
     ps3_data_send_to_host[2] = io_key_status;
     ps3_data_send_to_host[14] = my_key_val_1 ? 0xff : 0;    // ↑ ADC value
-    ps3_data_send_to_host[15] = my_key_val_4 ? 0xff : 0;    // → ADC value
-    ps3_data_send_to_host[16] = my_key_val_2 ? 0xff : 0;    // ↓ ADC value
-    ps3_data_send_to_host[17] = my_key_val_3 ? 0xff : 0;    // ← ADC value
+    ps3_data_send_to_host[15] = my_key_val_2 ? 0xff : 0;    // → ADC value
+    ps3_data_send_to_host[16] = my_key_val_3 ? 0xff : 0;    // ↓ ADC value
+    ps3_data_send_to_host[17] = my_key_val_4 ? 0xff : 0;    // ← ADC value
 
 
     io_key_status = 0x00;                                           /* using the variant have to set zero , in the after assign the value*/
@@ -1496,10 +1507,10 @@ void ps3_read_key(void)
     ps3_data_send_to_host[3] = io_key_status;   // 只有键值同样也能识别, 区别可能在于在游戏中无法触发, 可能需要额外的ADC值
     ps3_data_send_to_host[20] = L_1_io_key ? 0xff : 0;  // L1, ADC value
     ps3_data_send_to_host[21] = R_1_io_key ? 0xff : 0;  // R1, ADC value
-    ps3_data_send_to_host[24] = a_key_val ? 0xff : 0;   // △, ADC value
+    ps3_data_send_to_host[22] = y_key_val ? 0xff : 0;   // △, ADC value
     ps3_data_send_to_host[23] = b_key_val ? 0xff : 0;   // ○, ADC value
-    ps3_data_send_to_host[25] = x_key_val ? 0xff : 0;   // ×, ADC value
-    ps3_data_send_to_host[22] = y_key_val ? 0xff : 0;   // □, ADC value
+    ps3_data_send_to_host[24] = x_key_val ? 0xff : 0;   // ×, ADC value
+    ps3_data_send_to_host[25] = a_key_val ? 0xff : 0;   // □, ADC value
 
 
     io_key_status = 0x00;                                           /* using the variant have to set zero , in the after assign the value*/
@@ -1708,7 +1719,15 @@ void ps3_right_read_rocker(void)
             R_Y_minus = (unsigned char)temp_Y_minus_f;
             R_Y_plus = 0;
 #if RIGHT_ROCKER_Y_AXIS /* Y axis */
-            ps3_data_send_to_host[9] = 0x7f + (0x80 - R_Y_minus);
+            if ((0x7f + (0x80 - R_Y_minus)) > 0xf7)
+            {
+                ps3_data_send_to_host[9] =0xff; // 解決不能到達邊界的問題, 預先計算的值跟實際的值出現了偏差
+            }
+            else
+            {
+                ps3_data_send_to_host[9] = 0x7f + (0x80 - R_Y_minus);   
+            }
+            
 #endif
         }
 #endif /* left rocker value buffer */
@@ -1832,21 +1851,21 @@ void *my_task(void *p_arg)
                 ps3_player_led();
                 ps3_send_to_host();
                 ps3_PWM_shake();
-                /*extern u8 ps3_out_DMA[64];
-                if ((tcc_count % (2000 / MAIN_TCC_TIMER)) == 0)
+                extern u8 ps3_out_DMA[64];
+                if ((tcc_count % (1000 / MAIN_TCC_TIMER)) == 0)
                 {
                     timer_send_flag = 1;
-                    printf("OUT DMA DATA\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x,\
+                    /*printf("OUT DMA DATA\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x,\
  %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x", ps3_out_DMA[0], ps3_out_DMA[1],
             ps3_out_DMA[2], ps3_out_DMA[3], ps3_out_DMA[4], ps3_out_DMA[5], ps3_out_DMA[6], ps3_out_DMA[7], ps3_out_DMA[8], ps3_out_DMA[9],
             ps3_out_DMA[10], ps3_out_DMA[11], ps3_out_DMA[12], ps3_out_DMA[13], ps3_out_DMA[14], ps3_out_DMA[15], ps3_out_DMA[16], ps3_out_DMA[17],
             ps3_out_DMA[18], ps3_out_DMA[19], ps3_out_DMA[20], ps3_out_DMA[21], ps3_out_DMA[22], ps3_out_DMA[23], ps3_out_DMA[24], ps3_out_DMA[25],
             ps3_out_DMA[26], ps3_out_DMA[27], ps3_out_DMA[28], ps3_out_DMA[29], ps3_out_DMA[30], ps3_out_DMA[31], ps3_out_DMA[32], ps3_out_DMA[33],
             ps3_out_DMA[34], ps3_out_DMA[35], ps3_out_DMA[36], ps3_out_DMA[37], ps3_out_DMA[38], ps3_out_DMA[39], ps3_out_DMA[40], ps3_out_DMA[41],
-            ps3_out_DMA[42], ps3_out_DMA[43], ps3_out_DMA[44], ps3_out_DMA[45], ps3_out_DMA[46], ps3_out_DMA[47], ps3_out_DMA[48], ps3_out_DMA[49]);
-                    printf("USBCON0: %x", JL_USB->CON0);
+            ps3_out_DMA[42], ps3_out_DMA[43], ps3_out_DMA[44], ps3_out_DMA[45], ps3_out_DMA[46], ps3_out_DMA[47], ps3_out_DMA[48], ps3_out_DMA[49]);*/
+                    printf("---------- %s ---------- %d, RY:%d", __func__, usb_connect_timeout_flag, ps3_data_send_to_host[9]);
                     timer_send_flag = 0;
-                }*/
+                }
             }
             //gpio_direction_output(IO_PORTA_01, 0);
 #if CHECK_MEMORY
