@@ -90,6 +90,8 @@ static unsigned char count_all_func[10]; // function start to end time
 #define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
 #define PS3_DEADBAND_X1     (460)
 #define PS3_DEADBAND_X2     (600)
+#define PS3_OUTSIDE_DEADBAND_X1 (50)
+#define PS3_OUTSIDE_DEADBAND_X2 (1000)
 #define TRIGGER_INIT_VAL    (30)        // trigger initial value
 #define TRIGGER_PRESS_VAL   (45)        // more than the value, so press the trigger
 
@@ -1672,33 +1674,49 @@ void ps3_right_read_rocker(void)
     R_rocker_ad_key_y = adc_get_value(6); // ADC6
 
 
-    if ((PS3_DEADBAND_X2 <= R_rocker_ad_key_x) || (PS3_DEADBAND_X1 >= R_rocker_ad_key_x))
+    if ((PS3_OUTSIDE_DEADBAND_X2 >=  R_rocker_ad_key_x) && (PS3_DEADBAND_X2 <= R_rocker_ad_key_x)
+        || (PS3_DEADBAND_X1 >= R_rocker_ad_key_x) && (PS3_OUTSIDE_DEADBAND_X1 <= R_rocker_ad_key_x))
     {
 #if RIGHT_ROCKER_BUFFER /* left rocker value buffer */
         if (PS3_DEADBAND_X2 <= R_rocker_ad_key_x)  // 0x7f~0xff, X+
         {
-            float temp_X_plus_f = R_rocker_ad_key_x / 4.0;     //1023/4=255.75
+            float temp_X_plus_f = R_rocker_ad_key_x / 3.8;     //1023/3.8=269.210...
             R_X_plus = (unsigned char)temp_X_plus_f;
             R_X_minus = 0;
 #if RIGHT_ROCKER_X_AXIS /* X axis */
+            if (R_X_plus >= 222)   // 溢出跳轉, 否則會在這個值定住然後又不會翻滾( 在游戲 god of war )
+                goto X_plusOverflow;    // 該辦法是非綫性的, 只是唔太想全部重新映射了, 費時
             ps3_data_send_to_host[8] = R_X_plus;
 #endif
         }
         if (PS3_DEADBAND_X1 >= R_rocker_ad_key_x)  // 0x7f~0x00, X-
         {
-            float temp_X_minus_f = R_rocker_ad_key_x / 3.59;    // 460/3.59=128.133...
+            float temp_X_minus_f = (R_rocker_ad_key_x - (R_rocker_ad_key_x / 7.0)) / 3.3;    // (460-460/10)/3.3=139.3939...
             R_X_minus = (unsigned char)temp_X_minus_f;
             R_X_plus = 0;
 #if RIGHT_ROCKER_X_AXIS /* X axis */
-            ps3_data_send_to_host[8] = R_X_minus;
+            if (R_X_minus <= 60)    // 該辦法是非綫性的, 只是唔太想全部重新映射了, 費時
+                goto XminusOverflow;
+            ps3_data_send_to_host[8] = R_X_minus;   // 斜摇杆无法达到边界
 #endif
         }
 #endif
+    }
+    else if(R_rocker_ad_key_x > PS3_OUTSIDE_DEADBAND_X2)
+    {
+        X_plusOverflow:
+        ps3_data_send_to_host[8] = 0xff;
+    }
+    else if (PS3_OUTSIDE_DEADBAND_X1 > R_rocker_ad_key_x)
+    {
+        XminusOverflow:
+        ps3_data_send_to_host[8] = 0x00;
     }
     else
     {
         ps3_data_send_to_host[8] = 0x7f;
     }
+
 
 
     if ((PS3_DEADBAND_X2 <= R_rocker_ad_key_y) || (PS3_DEADBAND_X1 >= R_rocker_ad_key_y)) // PS3的Y轴输入与AD值反转
@@ -1719,9 +1737,9 @@ void ps3_right_read_rocker(void)
             R_Y_minus = (unsigned char)temp_Y_minus_f;
             R_Y_plus = 0;
 #if RIGHT_ROCKER_Y_AXIS /* Y axis */
-            if ((0x7f + (0x80 - R_Y_minus)) > 0xf7)
-            {
-                ps3_data_send_to_host[9] =0xff; // 解決不能到達邊界的問題, 預先計算的值跟實際的值出現了偏差
+            if ((0x7f + (0x80 - R_Y_minus)) > 230) // 解決不能到達邊界的問題, 預先計算的值跟實際的值出現了偏差
+            {   // 該辦法是非綫性的, 只是唔太想全部重新映射了, 費時
+                ps3_data_send_to_host[9] =0xff; 
             }
             else
             {
@@ -1863,11 +1881,12 @@ void *my_task(void *p_arg)
             ps3_out_DMA[26], ps3_out_DMA[27], ps3_out_DMA[28], ps3_out_DMA[29], ps3_out_DMA[30], ps3_out_DMA[31], ps3_out_DMA[32], ps3_out_DMA[33],
             ps3_out_DMA[34], ps3_out_DMA[35], ps3_out_DMA[36], ps3_out_DMA[37], ps3_out_DMA[38], ps3_out_DMA[39], ps3_out_DMA[40], ps3_out_DMA[41],
             ps3_out_DMA[42], ps3_out_DMA[43], ps3_out_DMA[44], ps3_out_DMA[45], ps3_out_DMA[46], ps3_out_DMA[47], ps3_out_DMA[48], ps3_out_DMA[49]);*/
-                    printf("---------- %s ---------- %d, RY:%d", __func__, usb_connect_timeout_flag, ps3_data_send_to_host[9]);
+                    printf("---------- %s ---------- %d, LX>%d %d<LY, RX>%d %d<RY    %d", __func__, usb_connect_timeout_flag, ps3_data_send_to_host[6], 
+                        ps3_data_send_to_host[7], ps3_data_send_to_host[8], ps3_data_send_to_host[9], R_rocker_ad_key_x);
                     timer_send_flag = 0;
                 }
             }
-            //gpio_direction_output(IO_PORTA_01, 0);
+            //gpio_direction_output(IO_PORTA_01, 0);    
 #if CHECK_MEMORY
             if ((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)
             {
