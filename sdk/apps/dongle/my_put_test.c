@@ -1912,36 +1912,6 @@ void *my_task(void *p_arg)
         }break;
         case SPECIAL_FUNCTIONS:
         {
-            extern u8 usb_connect_timeout_flag;
-            if (!usb_connect_timeout_flag)
-            {
-                printf("file:%s, line:%d", __FILE__, __LINE__);
-                //
-                //usb_g_hold(usbfd);
-                //usb_setup_release(usbfd);
-                usb_timeout ^= 1;
-                usb_iomode(usb_timeout);
-                //os_time_dly(100);
-
-                //ret = usb_release(usbfd);    // 软件模拟拔插
-                printf(" RUN USB release ! ! !");
-                usb_connect_timeout_flag = 2;
-
-                if(!usb_timeout)
-                {
-                    usb_stop();
-                    usb_g_hold(usbfd);
-                    usb_var_release(usbfd);
-                    usb_h_sie_reset(usbfd);
-                    usb_setup_release(usbfd);
-                    usb_io_reset(usbfd);
-                    usb_start();
-                }
-
-                //usbstack_exit();
-                //usbstack_init();
-                //usb_start();    // 重新开始执行usb启动函数
-            }
         }break;
         default:
             break;
