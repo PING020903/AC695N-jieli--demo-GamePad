@@ -257,7 +257,7 @@ static const unsigned char Report01[] = {
 		0x00, 0x00
 
 };
-static const unsigned char ReportF2[] = {
+const unsigned char ReportF2[] = {
 		0xF2, 0xFF,
 		0xFF, 0x00,
 		0x04, 0x32,
@@ -511,6 +511,9 @@ static int ps3_report_len(int index)
 // 配置PS3的USB端点缓冲区
 u32 ps3_register(const usb_dev usb_id)
 {
+    for (int i = 4; i <= 9; i++)	// 對疑似手柄序列號的byte賦值
+	ReportF2[i] = rand32() % 0xff;
+	
     ps3_ep_in_dma = usb_alloc_ep_dmabuffer(usb_id, (0x01 | 0x80), MAXP_SIZE_HIDIN);
     if (ps3_ep_in_dma == NULL)
         log_error(" 'ps3_ep_in_dma' is NULL");
