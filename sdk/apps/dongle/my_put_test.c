@@ -1924,8 +1924,6 @@ void *my_task(void *p_arg)
             if (!PS3_host_flag) // 判斷是否有接收到PS3主機的OUT包
             {
                 timer_send_flag = 1;
-                extern u8 usb_reset_count;
-                usb_reset_count = 0;
                 /*我都唔知道此處是否有用*/
                 usb_stop();     // 停止
                 usbstack_exit();// 退出
