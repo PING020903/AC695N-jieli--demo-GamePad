@@ -84,7 +84,7 @@ static unsigned char count_all_func[10]; // function start to end time
 #define MY_TASK_NAME        "thursday"
 #define MAIN_TCC_TIMER      (4)
 #define LED_TCC_TIMER       (8)
-#define SPECIAL_FUNC_TCC    (600)
+#define SPECIAL_FUNC_TCC    (700)
 
 #define DEADBAND_X1         (490)       // internal deadband, minus side of the axis
 #define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
@@ -2338,7 +2338,7 @@ void my_task_init(void)
 #endif
 
 #if SPECIAL_FUNC_TIMER
-    ret_id_timer_SpecialFunctions = sys_hi_timer_add(NULL, SpecialFunc_timer_task, SPECIAL_FUNC_TCC);
+    ret_id_timer_SpecialFunctions = sys_hi_timer_add(NULL, SpecialFunc_timer_task, SPECIAL_FUNC_TCC);   // 建議唔好少於700ms, 容易誤判斷
     log_print(__LOG_INFO, NULL, "Special_Functions timer task ID : %d\n", ret_id_timer_SpecialFunctions);
 #endif
 #endif
