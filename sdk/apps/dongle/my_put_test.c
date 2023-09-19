@@ -84,7 +84,7 @@ static unsigned char count_all_func[10]; // function start to end time
 #define MY_TASK_NAME        "thursday"
 #define MAIN_TCC_TIMER      (4)
 #define LED_TCC_TIMER       (8)
-#define SPECIAL_FUNC_TCC    (700)
+#define SPECIAL_FUNC_TCC    (450)
 
 #define DEADBAND_X1         (490)       // internal deadband, minus side of the axis
 #define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
@@ -326,12 +326,17 @@ static inline void send_data_to_host(void)
 }
 static inline void ps3_send_to_host(void)
 {
+    extern unsigned char PS3_sendDATA_flag; // from hid.c
     unsigned int register_temp = JL_USB->CON0;
     register_temp = register_temp << 18;
     register_temp = register_temp >> 31; // 13th bit, SOF_PND
-    if (register_temp)
+    if (register_temp && PS3_sendDATA_flag)
         USB_TX_data(usbfd, ps3_data_send_to_host, sizeof(ps3_data_send_to_host));
-
+    else
+    {
+        if (register_temp)/* 爲了獲取開啓手柄的信號, 先發一次手柄信息 */
+            USB_TX_data(usbfd, ps3_data_send_to_host, sizeof(ps3_data_send_to_host));
+    }
 #if PS3_KEY_PRINT
     //extern unsigned char ps3_read_ep[64];
     //if (motor_data[1] != ps3_read_ep[4])  // 會導致卡住卡死
@@ -1887,8 +1892,8 @@ void *my_task(void *p_arg)
             ps3_out_DMA[26], ps3_out_DMA[27], ps3_out_DMA[28], ps3_out_DMA[29], ps3_out_DMA[30], ps3_out_DMA[31], ps3_out_DMA[32], ps3_out_DMA[33],
             ps3_out_DMA[34], ps3_out_DMA[35], ps3_out_DMA[36], ps3_out_DMA[37], ps3_out_DMA[38], ps3_out_DMA[39], ps3_out_DMA[40], ps3_out_DMA[41],
             ps3_out_DMA[42], ps3_out_DMA[43], ps3_out_DMA[44], ps3_out_DMA[45], ps3_out_DMA[46], ps3_out_DMA[47], ps3_out_DMA[48], ps3_out_DMA[49]);*/
-                    printf("---------- %s ---------- %d, LX>%d %d<LY, RX>%d %d<RY    %d", __func__, usb_connect_timeout_flag, ps3_data_send_to_host[6],
-                        ps3_data_send_to_host[7], ps3_data_send_to_host[8], ps3_data_send_to_host[9], R_rocker_ad_key_x);
+                    printf("---------- %s ---------- %d, LX>%d %d<LY, RX>%d %d<RY", __func__, usb_connect_timeout_flag, ps3_data_send_to_host[6],
+                        ps3_data_send_to_host[7], ps3_data_send_to_host[8], ps3_data_send_to_host[9]);
                     timer_send_flag = 0;
                 }
             }
@@ -1949,7 +1954,7 @@ void *my_task(void *p_arg)
                 usbstack_init();
                 usb_start();
                 timer_send_flag = 0;
-                change_host = 0;
+                change_host = 0;    // 更換平臺描述符后停止發送觸發當前任務的信號
             }
         }break;
         default:
@@ -2336,7 +2341,7 @@ void my_task_init(void)
 #endif
 
 #if SPECIAL_FUNC_TIMER
-    ret_id_timer_SpecialFunctions = sys_hi_timer_add(NULL, SpecialFunc_timer_task, SPECIAL_FUNC_TCC);   // 建議唔好少於700ms, 容易誤判斷
+    ret_id_timer_SpecialFunctions = sys_hi_timer_add(NULL, SpecialFunc_timer_task, SPECIAL_FUNC_TCC);   // 最好唔好少於450ms
     log_print(__LOG_INFO, NULL, "Special_Functions timer task ID : %d\n", ret_id_timer_SpecialFunctions);
 #endif
 #endif
