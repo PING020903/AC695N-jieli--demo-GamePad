@@ -23,7 +23,6 @@
 #define LOG_CLI_ENABLE
 #include "debug.h"
 
-unsigned char my_device_type = 0;
 extern unsigned char usb_connect_timeout_flag;  // from task_pc.c
 #if TCFG_USB_SLAVE_ENABLE
 
@@ -195,10 +194,9 @@ static const u8 serial_string[] = {
 };
 
 /* 判断连接超时进行设备描述符的切换 */
-/* default: PC */
+/* default: PS3 */
 void get_device_descriptor(u8 *ptr)
 {
-
     printf("---------- %s ----------, %d\n", __func__, usb_connect_timeout_flag);
     // 与主机首次通讯时, 主机并不清楚从机是个什么设备, 任意设备描述符即可
     if (usb_connect_timeout_flag == 1)    // PC适配
