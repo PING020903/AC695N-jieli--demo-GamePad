@@ -54,7 +54,7 @@
 #define THREAD_CREATE       1   // 线程创建
 #define MAIN_TIMER          1   // 主要定时器
 #define PWM_TIEMR           1   // PWM定时器
-#define SPECIAL_FUNC_TIMER  0   // 特殊功能定时器
+#define SPECIAL_FUNC_TIMER  1   // 特殊功能定时器
 #define MY_PRINTF           0   // 我的打印
 #define PWM_INIT            1   // PWM初始化
 
@@ -84,7 +84,7 @@ static unsigned char count_all_func[10]; // function start to end time
 #define MY_TASK_NAME        "thursday"
 #define MAIN_TCC_TIMER      (4)
 #define LED_TCC_TIMER       (8)
-#define SPECIAL_FUNC_TCC    (5000)
+#define SPECIAL_FUNC_TCC    (600)
 
 #define DEADBAND_X1         (490)       // internal deadband, minus side of the axis
 #define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
@@ -1377,7 +1377,7 @@ void records_movement(void)
                 {
                     printf("    VM write ret: %d, WRITE ERROR ! ! !", ret_w);
                 }
-                    
+
             }
             write_success:
             timer_send_flag = 0;
@@ -1739,13 +1739,13 @@ void ps3_right_read_rocker(void)
 #if RIGHT_ROCKER_Y_AXIS /* Y axis */
             if ((0x7f + (0x80 - R_Y_minus)) > 230) // 解決不能到達邊界的問題, 預先計算的值跟實際的值出現了偏差
             {   // 該辦法是非綫性的, 只是唔太想全部重新映射了, 費時
-                ps3_data_send_to_host[9] =0xff; 
+                ps3_data_send_to_host[9] =0xff;
             }
             else
             {
-                ps3_data_send_to_host[9] = 0x7f + (0x80 - R_Y_minus);   
+                ps3_data_send_to_host[9] = 0x7f + (0x80 - R_Y_minus);
             }
-            
+
 #endif
         }
 #endif /* left rocker value buffer */
@@ -1833,6 +1833,8 @@ void ps3_PWM_shake(void)/**/
 }
 /*****************************************************************************************************/
 
+static unsigned char change_host = 1;
+extern void usbstack_exit();
 void *my_task(void *p_arg)
 {
     extern unsigned char usb_connect_timeout_flag;  // from task_pc.c
@@ -1841,13 +1843,16 @@ void *my_task(void *p_arg)
     {
         /* receive task queue */
         int ret = os_taskq_pend(NULL, msg, ARRAY_SIZE(msg));
-        if (ret != OS_TASKQ)
+        //printf("====== OS_TASK: %d, USB->CON0: %x, msg[0]: %x", ret, JL_USB->CON0, msg[0]);
+        if (ret != OS_TASKQ)    // 没有收到任务队列跳出一次循环
             continue;
 
         switch (msg[0])
         {
         case MAIN_TCC_TASK:
         {
+            /*if ((tcc_count % (1000 / MAIN_TCC_TIMER)) == 0)
+                printf("---------- what happend ? ? ? ---------- %d", usb_connect_timeout_flag);*/
             //gpio_direction_output(IO_PORTA_01, 1);
             if (usb_connect_timeout_flag == 1)
             {
@@ -1862,12 +1867,15 @@ void *my_task(void *p_arg)
             }
             if (usb_connect_timeout_flag == 2)
             {
+
                 ps3_read_key();
                 ps3_left_read_rocker();
                 ps3_right_read_rocker();
                 ps3_read_trigger();
                 ps3_player_led();
+                timer_send_flag = 0;
                 ps3_send_to_host();
+                timer_send_flag = 0;
                 ps3_PWM_shake();
                 extern u8 ps3_out_DMA[64];
                 if ((tcc_count % (1000 / MAIN_TCC_TIMER)) == 0)
@@ -1881,12 +1889,12 @@ void *my_task(void *p_arg)
             ps3_out_DMA[26], ps3_out_DMA[27], ps3_out_DMA[28], ps3_out_DMA[29], ps3_out_DMA[30], ps3_out_DMA[31], ps3_out_DMA[32], ps3_out_DMA[33],
             ps3_out_DMA[34], ps3_out_DMA[35], ps3_out_DMA[36], ps3_out_DMA[37], ps3_out_DMA[38], ps3_out_DMA[39], ps3_out_DMA[40], ps3_out_DMA[41],
             ps3_out_DMA[42], ps3_out_DMA[43], ps3_out_DMA[44], ps3_out_DMA[45], ps3_out_DMA[46], ps3_out_DMA[47], ps3_out_DMA[48], ps3_out_DMA[49]);*/
-                    printf("---------- %s ---------- %d, LX>%d %d<LY, RX>%d %d<RY    %d", __func__, usb_connect_timeout_flag, ps3_data_send_to_host[6], 
+                    printf("---------- %s ---------- %d, LX>%d %d<LY, RX>%d %d<RY    %d", __func__, usb_connect_timeout_flag, ps3_data_send_to_host[6],
                         ps3_data_send_to_host[7], ps3_data_send_to_host[8], ps3_data_send_to_host[9], R_rocker_ad_key_x);
                     timer_send_flag = 0;
                 }
             }
-            //gpio_direction_output(IO_PORTA_01, 0);    
+            //gpio_direction_output(IO_PORTA_01, 0);
 #if CHECK_MEMORY
             if ((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)
             {
@@ -1912,8 +1920,45 @@ void *my_task(void *p_arg)
         }break;
         case SPECIAL_FUNCTIONS:
         {
+            extern unsigned char PS3_host_flag; // from hid.c
+            if (!PS3_host_flag) // 判斷是否有接收到PS3主機的OUT包
+            {
+                timer_send_flag = 1;
+                extern u8 usb_reset_count;
+                usb_reset_count = 0;
+                /*我都唔知道此處是否有用*/
+                usb_stop();     // 停止
+                usbstack_exit();// 退出
+                /*我都唔知道此處是否有用*/
+                //usb_iomode(0);  // 關閉
+                gpio_set_direction(IO_PORT_DP, 0);  // 設置輸出
+                gpio_set_direction(IO_PORT_DM, 0);
+                gpio_set_pull_up(IO_PORT_DP, 0);    // 非上拉
+                gpio_set_pull_up(IO_PORT_DM, 0);
+                gpio_set_pull_down(IO_PORT_DP, 1);  // 下拉
+                gpio_set_pull_down(IO_PORT_DM, 1);
+                gpio_write(IO_PORT_DP, 1);          // 輸出1
+                gpio_write(IO_PORT_DM, 1);
+                //os_time_dly(250);
+                //delay(10000);
+                /************************/
+                printf(" RUN USB release ! ! !");
+                if (usb_connect_timeout_flag == 1)
+                    usb_connect_timeout_flag = 2;   // 切換平臺所用的描述符
+                else
+                {
+                    usb_connect_timeout_flag = 1;
+                }
+                printf("file:%s, line:%d", __FILE__, __LINE__);
+                usbstack_init();
+                usb_start();
+                timer_send_flag = 0;
+                change_host = 0;
+            }
         }break;
         default:
+            if ((tcc_count % (1000 / MAIN_TCC_TIMER)) == 0)
+                printf("---------- %s ---------- %d", __func__, usb_connect_timeout_flag);
             break;
         }
     }
@@ -2170,7 +2215,7 @@ static inline void *my_timer_task(void *p_arg)
         ret = os_taskq_post_type(MY_TASK_NAME, MAIN_TCC_TASK, 0, NULL);
 
     if (ret != OS_NO_ERR)   // 0~65, from "os_error.h"
-        log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);
+        log_print(__LOG_ERROR, NULL, "FAIL ! ! !    MAIN_TCC_TASK return value : %d\n", ret);   // 搞掂要注釋任務隊列溢出的打印, 防止MCU重啓
 
     tcc_count++;
     return &ret;
@@ -2193,7 +2238,11 @@ static inline void *led_timer_task(void *p_arg)
 }
 static inline void *SpecialFunc_timer_task(void *p_arg)
 {
-    int ret = os_taskq_post_type(MY_TASK_NAME, SPECIAL_FUNCTIONS, 0, NULL);
+    int ret = 0;    // 避免未發送隊列導致打印fail
+    if (change_host)    // USB主機平臺更換標記
+    {
+        ret = os_taskq_post_type(MY_TASK_NAME, SPECIAL_FUNCTIONS, 0, NULL);
+    }
     if (ret != OS_NO_ERR)
         log_print(__LOG_ERROR, NULL, "FAIL ! ! !    SPECIAL_FUNCTIONS return value : %d\n", ret);
 
