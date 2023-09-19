@@ -23,16 +23,16 @@
 
 volatile unsigned char trigger[2] = {0x00};
 unsigned char player_led;
+extern volatile unsigned char player_flicker_time;
 
-static const u8 sConfigDescriptor_interface_0[0x28] = 	// < USER Interface Descriptor >
+static const u8 sConfigDescriptor_interface_0[0x28] = 	// < USER Interface Descriptor > /* use to sned key_values , receive host packet */
 {
-    //0x09, 0x02, 0x99, 0x00, 0x04, 0x01, 0x00, 0xa0, 0xfa,
     0x09, 0x04, 0x00, 0x00, 0x02, 0xff, 0x5d, 0x01, 0x00,
     0x11, 0x21, 0x10, 0x01, 0x01, 0x25, 0x81, 0x14, 0x03, 0x03, 0x03, 0x04, 0x13, 0x02, 0x08, 0x03, 0x03,
     0x07, 0x05, 0x81, 0x03, 0x20, 0x00, 0x01,
     0x07, 0x05, 0x02, 0x03, 0x20, 0x00, 0x08,
 };
-static const u8 sConfigDescriptor_interface_1[0x40] =
+static const u8 sConfigDescriptor_interface_1[0x40] =   /* 端点3、4、5都没有用到 */
 {
     0x09, 0x04, 0x01, 0x00, 0x04, 0xff, 0x5d, 0x03, 0x00,
     0x1b, 0x21, 0x00, 0x01, 0x01, 0x01, 0x83, 0x40, 0x01, 0x04, 0x20, 0x16, 0x85, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -41,13 +41,13 @@ static const u8 sConfigDescriptor_interface_1[0x40] =
     0x07, 0x05, 0x85, 0x03, 0x20, 0x00, 0x40,
     0x07, 0x05, 0x03, 0x03, 0x20, 0x00, 0x10,
 };
-static const u8 sConfigDescriptor_interface_2[0x19] =
+static const u8 sConfigDescriptor_interface_2[0x19] =   /* 端点6 */
 {
     0x09, 0x04, 0x02, 0x00, 0x01, 0xff, 0x5d, 0x02, 0x00,
     0x09, 0x21, 0x00, 0x01, 0x01, 0x22, 0x86, 0x07, 0x00,
     0x07, 0x05, 0x86, 0x03, 0x20, 0x00, 0x10,
 };
-static const u8 sConfigDescriptor_interface_3[0x0f] =
+static const u8 sConfigDescriptor_interface_3[0x0f] =   /* ?HID */
 {
     0x09, 0x04, 0x03, 0x00, 0x00, 0xff, 0xfd, 0x13, 0x04,
     0x06, 0x41, 0x00, 0x01, 0x01, 0x03
@@ -1130,9 +1130,22 @@ void mic_reset(struct usb_device_t *usb_device, u32 ift_num)
 /****************************************USER************************************************/
 /**接口描述符不能直接全部塞到一起**/
 /*(0x01|0x80)端点与方向
-**(0x02)端点与方向, 方向是0, 省略了*/
-#if ENABLE
-u8 config_flag = 0;
+* (0x02)端点与方向, 方向是0, 省略了*/
+
+/* 对其中一组进行初始化即可, 因为一次初始化已经将所用到的端点都配置了 */
+#define A   true   // interface hander
+#define A1  true   // usb reset hander
+
+#define B   true   // interface hander
+#define B1  true   // usb reset hander
+
+#define C   true   // interface hander
+#define C1  true   // usb reset hander
+
+#define D   true    // interface hander
+#define D1  true    // usb reset hander
+#define PLAYER_LED  1
+static u8 config_flag = 0;
 static u8* xbox360_ep_in_dma;
 static u8* xbox360_ep_out_dma;
 static u8* xbox360_ep3_dma;
@@ -1140,11 +1153,11 @@ static u8 fraud_temp[0x14] = {  0x00, 0x14, 0x00, 0x00,
                                 0x00, 0x00, 0x00, 0x00,
                                 0x00, 0xff, 0x00, 0x00,
                                 0x00, 0xff, 0x00, 0x00,
-                                0x00, 0x00, 0x00, 0x00,};
+                                0x00, 0x00, 0x00, 0x00};
 u32 xbox360_register(const usb_dev usb_id)
 {
     printf("---------- %s ----------\n", __func__);
-    /* 根据接口描述符, 设置接口ID 0x01   bit7: IN1/OUT0 */
+    /* 根据接口描述符, 设置接口ID 0x01   bit7: IN/OUT 对应 1/0 */
     xbox360_ep_in_dma = usb_alloc_ep_dmabuffer(usb_id, (0x01 | 0x80), MAXP_SIZE_HIDIN);
     if(xbox360_ep_in_dma == NULL)
         log_error(" 'xbox360_ep_in_dma' is NULL");
@@ -1175,40 +1188,36 @@ static usb_interrupt hid_rx_data(struct usb_device_t *usb_device, u32 ep)
         (xbox360_ep_out_dma[1] == 0x03) &&
         (xbox360_ep_out_dma[2] >= 0x02 || xbox360_ep_out_dma[2] <= 0x05) &&
         config_flag == 0){
-#if 0
-        const u8 temp_arr[] = {0x03, 0x03, 0x03};
-        const u8 temp_arr1[] = {0x08, 0x03, 0x00};
-        usb_g_intr_write(usb_id, 0x01, temp_arr, 3);
-        usb_g_intr_write(usb_id, 0x01, temp_arr1, 3);
-#endif
+#if PLAYER_LED
         if(xbox360_ep_out_dma[2] == 0x02){      /* player1 */
             gpio_direction_output(IO_PORTA_03, 1 );
             gpio_direction_output(IO_PORTA_02, 0 );
             gpio_direction_output(IO_PORTA_01, 0 );
             gpio_direction_output(IO_PORTA_04, 0 );
-	    player_led = 1;
+            player_led = 1;
         }
         if(xbox360_ep_out_dma[2] == 0x03){      /* player2 */
             gpio_direction_output(IO_PORTA_03, 0 );
             gpio_direction_output(IO_PORTA_02, 1 );
             gpio_direction_output(IO_PORTA_01, 0 );
             gpio_direction_output(IO_PORTA_04, 0 );
-	    player_led = 2;
+            player_led = 2;
         }
         if(xbox360_ep_out_dma[2] == 0x04){      /* player3 */
             gpio_direction_output(IO_PORTA_03, 0 );
             gpio_direction_output(IO_PORTA_02, 0 );
             gpio_direction_output(IO_PORTA_01, 1 );
             gpio_direction_output(IO_PORTA_04, 0 );
-	    player_led = 3;
+            player_led = 3;
         }
         if(xbox360_ep_out_dma[2] == 0x05){      /* player4 */
             gpio_direction_output(IO_PORTA_03, 0 );
             gpio_direction_output(IO_PORTA_02, 0 );
             gpio_direction_output(IO_PORTA_01, 0 );
             gpio_direction_output(IO_PORTA_04, 1 );
-	    player_led = 4;
+            player_led = 4;
         }
+#endif
         config_flag++;
     }
     if( (xbox360_ep_out_dma[0] == 0x01) &&
@@ -1218,7 +1227,6 @@ static usb_interrupt hid_rx_data(struct usb_device_t *usb_device, u32 ep)
         hid_tx_data(usb_device, xbox360_ep_out_dma, rx_len);
     }
 
-    //printf("---------------------------------%x, %x, %x\n", xbox360_ep2_out_dma[0], xbox360_ep2_out_dma[1], xbox360_ep2_out_dma[2]);
     if( (xbox360_ep_out_dma[0] == 0x02) &&
         (xbox360_ep_out_dma[1] == 0x08) &&
         (xbox360_ep_out_dma[2] == 0x03)){
@@ -1227,6 +1235,7 @@ static usb_interrupt hid_rx_data(struct usb_device_t *usb_device, u32 ep)
     if( (xbox360_ep_out_dma[0] == 0x00) &&
         (xbox360_ep_out_dma[1] == 0x03) &&
         (xbox360_ep_out_dma[2] == 0x00)){
+        player_flicker_time = 1;
         u8 temp[0x03] = {0x05, 0x03, 0x00};
         usb_g_intr_write(usb_id, 0x01, temp, 0x03);
     }
@@ -1241,6 +1250,7 @@ static usb_interrupt test_rx_data(struct usb_device_t *usb_device, u32 ep)
 {
 
 }
+/* 一次将所有使用的端点初始化 */
 static void xbox360_endpoint_init(struct usb_device_t *usb_device, u32 itf)
 {
     printf("---------- %s ----------\n", __func__);
@@ -1259,7 +1269,7 @@ static void xbox360_endpoint_init(struct usb_device_t *usb_device, u32 itf)
     memset(xbox360_ep3_dma, 0, MAXP_SIZE_HIDOUT);
     usb_g_ep_config(usb_id, 3U, USB_ENDPOINT_XFER_INT, 1, xbox360_ep3_dma, MAXP_SIZE_HIDOUT);
     usb_g_set_intr_hander(usb_id, 3U, test_rx_data);
-    usb_enable_ep(usb_id, 3U);
+    usb_enable_ep(usb_id, 3);
 }
 static void pc360_reset_hander(struct usb_device_t *usb_device, u32 itf)
 {
@@ -1267,9 +1277,12 @@ static void pc360_reset_hander(struct usb_device_t *usb_device, u32 itf)
     const usb_dev usb_id = usb_device2id(usb_device);
     xbox360_endpoint_init(usb_device, itf);
 }
+
 static u32 pc360_interface_hander(struct usb_device_t *usb_device, struct usb_ctrlrequest *setup)
 {
     u8 mute;
+
+    // 此时是供应商信息 c1, 1, 0, 1, 0, 0, 14, 0
     log_debug("---------- %s ----------", __func__);
     const usb_dev usb_id = usb_device2id(usb_device);
     u32 tx_len;
@@ -1277,22 +1290,16 @@ static u32 pc360_interface_hander(struct usb_device_t *usb_device, struct usb_ct
     u32 bRequestType = setup->bRequestType & USB_TYPE_MASK;
     u32 ret = 0;
 
-    /*根据例程, 三种情况皆为返回空包*/
+    /* 根据例程, 三种情况皆为返回空包 *//* 该switch选择分支放置打印也没有输出, 估计是执行时间太短暂未来得及打印输出 */
     switch (setup->bRequest) {
         case USB_REQ_GET_STATUS:{
-            log_debug("---------- setup->bRequest: %x", setup->bRequest);
-        usb_set_setup_phase(usb_device, USB_EP0_SET_STALL);
-        }
-        break;
+            usb_set_setup_phase(usb_device, USB_EP0_SET_STALL);
+        }break;
         case USB_REQ_SET_INTERFACE:{
         /*当主机请求set_Interface的时候，确实是返回空包，端点就绪时候返回NAK, 未就绪时候返回STALL*/
-        log_debug("---------- setup->bRequest: %x", setup->bRequest);
             usb_set_setup_phase(usb_device, USB_EP0_SET_STALL);//no alt setting
-
-            }
-            break;
+            }break;
         case USB_REQ_GET_INTERFACE:{
-            log_debug("---------- setup->bRequest: %x", setup->bRequest);
             if (setup->wValue || (setup->wLength != 1)) {
                 usb_set_setup_phase(usb_device, USB_EP0_SET_STALL);
             } else if (usb_device->bDeviceStates == USB_DEFAULT) {
@@ -1304,16 +1311,19 @@ static u32 pc360_interface_hander(struct usb_device_t *usb_device, struct usb_ct
                 tx_payload[0] = 0x00;
                 usb_set_data_payload(usb_device, setup, tx_payload, tx_len);
             }
-            }
-            break;
-        default:
-        log_debug("---------- setup->bRequest: %x", setup->bRequest);
-            ret = 1 ;
-            break;
+        }break;
+        case USB_REQ_CLEAR_FEATURE: {
+        }break;
+        case USB_REQ_SET_CONFIGURATION: {
+        }break;
+        default: {
+            ret = 1;
+        }break;
     }
     return ret;
 }
-#endif
+
+
 /*根据抓包观察, IN点为EP1, OUT点为EP2, 应该是第一个Interface(便是uac_my_pc360_0)作为发送数据包的Interface*/
 u32 uac_my_pc360_0(const usb_dev usb_id, u8 *ptr, u32 *cur_itf_num)
 {
@@ -1325,15 +1335,19 @@ u32 uac_my_pc360_0(const usb_dev usb_id, u8 *ptr, u32 *cur_itf_num)
     log_debug("my device:%d\n", *cur_itf_num);
 
     memcpy(tptr, (u8 *)sConfigDescriptor_interface_0, sizeof(sConfigDescriptor_interface_0));
-    if (usb_set_interface_hander(usb_id, *cur_itf_num, pc360_interface_hander) != *cur_itf_num) {/*进入ASSERT宏, cpu_reset或者打印debug*/
-        ASSERT(0, "Xbox(PC)360 set interface_hander fail");
+    if(A1){
+        if (usb_set_interface_hander(usb_id, *cur_itf_num, pc360_interface_hander) != *cur_itf_num) {/*进入ASSERT宏, cpu_reset或者打印debug*/
+            ASSERT(0, "Xbox(PC)360 set interface_hander fail");
+        }
     }
-    if (usb_set_reset_hander(usb_id, *cur_itf_num, pc360_reset_hander) != *cur_itf_num) {
-        ASSERT(0, "Xbox(PC)360 set interface_reset_hander fail");
+    if (A)
+    {
+        if (usb_set_reset_hander(usb_id, *cur_itf_num, pc360_reset_hander) != *cur_itf_num) {
+            ASSERT(0, "Xbox(PC)360 set interface_reset_hander fail");
+        }
     }
 
     (*cur_itf_num) ++;
-
     i = sizeof(sConfigDescriptor_interface_0);
     return i;
 }
@@ -1347,15 +1361,19 @@ u32 uac_my_pc360_1(const usb_dev usb_id, u8 *ptr, u32 *cur_itf_num)
     log_debug("my device:%d\n", *cur_itf_num);
 
     memcpy(tptr, (u8 *)sConfigDescriptor_interface_1, sizeof(sConfigDescriptor_interface_1));
-    if (usb_set_interface_hander(usb_id, *cur_itf_num, pc360_interface_hander) != *cur_itf_num) {
-        ASSERT(0, "Xbox(PC)360 set interface_hander fail");
+    if (B1) {
+        if (usb_set_interface_hander(usb_id, *cur_itf_num, pc360_interface_hander) != *cur_itf_num) {
+            ASSERT(0, "Xbox(PC)360 set interface_hander fail");
+        }
     }
-    if (usb_set_reset_hander(usb_id, *cur_itf_num, pc360_reset_hander) != *cur_itf_num) {
-        ASSERT(0, "Xbox(PC)360 set interface_reset_hander fail");
+    if (B)
+    {
+        if (usb_set_reset_hander(usb_id, *cur_itf_num, pc360_reset_hander) != *cur_itf_num) {
+            ASSERT(0, "Xbox(PC)360 set interface_reset_hander fail");
+        }
     }
 
     (*cur_itf_num) ++;
-
     i = sizeof(sConfigDescriptor_interface_1);
     return i;
 }
@@ -1369,15 +1387,19 @@ u32 uac_my_pc360_2(const usb_dev usb_id, u8 *ptr, u32 *cur_itf_num)
     log_debug("my device:%d\n", *cur_itf_num);
 
     memcpy(tptr, (u8 *)sConfigDescriptor_interface_2, sizeof(sConfigDescriptor_interface_2));
-    if (usb_set_interface_hander(usb_id, *cur_itf_num, pc360_interface_hander) != *cur_itf_num) {
-        ASSERT(0, "Xbox(PC)360 set interface_hander fail");
+    if (C1) {
+        if (usb_set_interface_hander(usb_id, *cur_itf_num, pc360_interface_hander) != *cur_itf_num) {
+            ASSERT(0, "Xbox(PC)360 set interface_hander fail");
+        }
     }
-    if (usb_set_reset_hander(usb_id, *cur_itf_num, pc360_reset_hander) != *cur_itf_num) {
-        ASSERT(0, "Xbox(PC)360 set interface_reset_hander fail");
+    if (C)
+    {
+        if (usb_set_reset_hander(usb_id, *cur_itf_num, pc360_reset_hander) != *cur_itf_num) {
+            ASSERT(0, "Xbox(PC)360 set interface_reset_hander fail");
+        }
     }
 
     (*cur_itf_num) ++;
-
     i = sizeof(sConfigDescriptor_interface_2);
     return i;
 }
@@ -1387,19 +1409,24 @@ u32 uac_my_pc360_3(const usb_dev usb_id, u8 *ptr, u32 *cur_itf_num)
     u8 *tptr = ptr;
     u32 offset;
     u32 frame_len;
+
     log_debug("---------- %s ----------", __func__);
     log_debug("my device:%d\n", *cur_itf_num);
 
     memcpy(tptr, (u8 *)sConfigDescriptor_interface_3, sizeof(sConfigDescriptor_interface_3));
-    if (usb_set_interface_hander(usb_id, *cur_itf_num, pc360_interface_hander) != *cur_itf_num) {
-        ASSERT(0, "Xbox(PC)360 set interface_hander fail");
+    if (D1) {
+        if (usb_set_interface_hander(usb_id, *cur_itf_num, pc360_interface_hander) != *cur_itf_num) {
+            ASSERT(0, "Xbox(PC)360 set interface_hander fail");
+        }
     }
-    if (usb_set_reset_hander(usb_id, *cur_itf_num, pc360_reset_hander) != *cur_itf_num) {
-        ASSERT(0, "Xbox(PC)360 set interface_reset_hander fail");
+    if (D)
+    {
+        if (usb_set_reset_hander(usb_id, *cur_itf_num, pc360_reset_hander) != *cur_itf_num) {
+            ASSERT(0, "Xbox(PC)360 set interface_reset_hander fail");
+        }
     }
 
     (*cur_itf_num) ++;
-
     i = sizeof(sConfigDescriptor_interface_3);
     return i;
 }
