@@ -559,7 +559,6 @@ static void ps3_reset_hander(struct usb_device_t* usb_device, u32 itf)
 {
 	log_debug("---------- %s ----------", __func__);
 	extern u8 usb_reset_count;
-	usb_reset_count++;
 	const usb_dev usb_id = usb_device2id(usb_device);
 	//ps3_endpoint_init(usb_device, itf);
 }
