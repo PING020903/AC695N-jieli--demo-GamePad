@@ -1822,14 +1822,12 @@ void ps3_player_led(void)
 }
 void ps3_PWM_shake(void)/**/
 {
-    gpio_direction_output(IO_PORTA_01, 1);
     extern u8 ps3_out_DMA[64];  // 獲取主機所發送的震動值
 
     timer_send_flag = 0;    // 实际中出现了任务队列溢出的情况, 试图关闭定时器改善超时导致OS重启
     mcpwm_set_duty(pwm_ch1, pwm_timer1, (ps3_out_DMA[5] * 100));
     mcpwm_set_duty(pwm_ch0, pwm_timer0, (ps3_out_DMA[3] * 100));
     timer_send_flag = 0;
-    gpio_direction_output(IO_PORTA_01, 0);
 }
 /*****************************************************************************************************/
 
