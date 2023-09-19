@@ -257,7 +257,7 @@ static const unsigned char Report01[] = {
 		0x00, 0x00
 
 };
-const unsigned char ReportF2[] = {
+static unsigned char ReportF2[] = {
 		0xF2, 0xFF,
 		0xFF, 0x00,
 		0x04, 0x32,
@@ -511,9 +511,9 @@ static int ps3_report_len(int index)
 // 配置PS3的USB端点缓冲区
 u32 ps3_register(const usb_dev usb_id)
 {
-    for (int i = 4; i <= 9; i++)	// 對疑似手柄序列號的byte賦值
-	ReportF2[i] = rand32() % 0xff;
-	
+	for (int i = 4; i <= 9; i++)	// 修改疑似序列号的data, 因为相同的情况下会导致手柄控制冲突
+		ReportF2[i] = rand32() % 255;
+
     ps3_ep_in_dma = usb_alloc_ep_dmabuffer(usb_id, (0x01 | 0x80), MAXP_SIZE_HIDIN);
     if (ps3_ep_in_dma == NULL)
         log_error(" 'ps3_ep_in_dma' is NULL");
@@ -565,6 +565,7 @@ static void ps3_reset_hander(struct usb_device_t* usb_device, u32 itf)
 }
 
 unsigned char get_report_f7_FLAG = 0;
+unsigned char PS3_host_flag = 0;
 unsigned char ps3_player_ID;
 //static unsigned char arr_OUTrecv[64];
 static u32 ps3_recv_output_report(struct usb_device_t* usb_device, struct usb_ctrlrequest* setup)
@@ -643,6 +644,20 @@ static u32 ps3_interface_hander(struct usb_device_t* usb_device, struct usb_ctrl
 		}
 	}break;
 	case USB_REQ_GET_DESCRIPTOR: {
+		switch (setup->wValue)
+		{
+		case /*USB_HID_DT_REPORT*/0x2200: {
+			usb_set_data_payload(usb_device, setup, HID_ReportDescriptor, sizeof(HID_ReportDescriptor));
+			ps3_endpoint_init(usb_device, 0);
+			get_report_f7_FLAG = 1;
+		}break;
+		case USB_REQ_GET_PROTOCOL: {
+			const unsigned char protocl[] = { 0x04, 0x03, 0x09, 0x04 };
+			usb_set_data_payload(usb_device, setup, protocl, sizeof(protocl));
+		}break;
+		default:
+			break;
+		}
 	}break;
 	case USB_REQ_GET_REPORT: {
 		ps3_endpoint_init(usb_device, 0);
@@ -672,6 +687,7 @@ static u32 ps3_interface_hander(struct usb_device_t* usb_device, struct usb_ctrl
 		}
 	}break;
 	case USB_REQ_SET_REPORT: {
+		PS3_host_flag = 1;	// PS3平臺特徵
 		usb_set_setup_recv(usb_device, ps3_recv_output_report);
 		/*log_debug("---------- REQUEST SET REPORT ----------\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x,\
  %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x", ps3_read_ep[0], ps3_read_ep[1],
