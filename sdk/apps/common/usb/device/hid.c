@@ -22,6 +22,7 @@
 #define LOG_CLI_ENABLE
 #define PS3_SUPPORT 1
 #include "debug.h"
+#define DEBUG_PRINT 0
 
 
 #if ENABLE  // 原文
@@ -467,6 +468,10 @@ static u8* ps3_ep_out_dma;
 u8 ps3_read_ep[64];
 u8 ps3_out_DMA[64];
 static unsigned char report_EF_flag[2] = { 0 };
+unsigned char get_report_f7_FLAG = 0;
+unsigned char PS3_host_flag = 0;
+unsigned char PS3_sendDATA_flag = 0;	// 識別到主機開啓手柄命令后放開發送DATA限制
+unsigned char ps3_player_ID;
 
 static void* ps3_report_point(int index)
 {
@@ -534,7 +539,7 @@ static usb_interrupt ps3_rx_data(struct usb_device_t* usb_device, u32 ep)
 	//log_debug("---------- %s ----------", __func__);
 	const usb_dev usb_id = usb_device2id(usb_device);
 	u32 rx_len = usb_g_intr_read(usb_id, ep, ps3_out_DMA, 64, 0);
-
+	
 	//ps3_tx_data(usb_device, ps3_ep_out_dma, rx_len);
 
 	//usb_g_intr_write(usb_id, 0x01, fraud_temp, 0x14);
@@ -544,7 +549,9 @@ static usb_interrupt ps3_rx_data(struct usb_device_t* usb_device, u32 ep)
 /* 一次将所有使用的端点初始化 */
 static void ps3_endpoint_init(struct usb_device_t* usb_device, u32 itf)
 {
+#if DEBUG_PRINT
 	printf("---------- %s ----------\n", __func__);
+#endif
 	const usb_dev usb_id = usb_device2id(usb_device);
 	memset(ps3_ep_out_dma, 0, MAXP_SIZE_HIDOUT);
 	usb_g_ep_config(usb_id, (HID_EP_OUT), USB_ENDPOINT_XFER_INT, 1, ps3_ep_out_dma, MAXP_SIZE_HIDOUT);
@@ -557,22 +564,28 @@ static void ps3_endpoint_init(struct usb_device_t* usb_device, u32 itf)
 }
 static void ps3_reset_hander(struct usb_device_t* usb_device, u32 itf)
 {
+#if DEBUG_PRINT
 	log_debug("---------- %s ----------", __func__);
+#endif
 	extern u8 usb_reset_count;
 	const usb_dev usb_id = usb_device2id(usb_device);
 	//ps3_endpoint_init(usb_device, itf);
 }
-
-unsigned char get_report_f7_FLAG = 0;
-unsigned char PS3_host_flag = 0;
-unsigned char ps3_player_ID;
-//static unsigned char arr_OUTrecv[64];
 static u32 ps3_recv_output_report(struct usb_device_t* usb_device, struct usb_ctrlrequest* setup)
 {
-	gpio_direction_output(IO_PORTA_03, 1);
 	const usb_dev usb_id = usb_device2id(usb_device);
 	usb_read_ep0(usb_id, ps3_read_ep, MIN(sizeof(ps3_read_ep), setup->wLength));
 	//printf("USB_REQ_SET_REPORT %x, %x, %x", ps3_read_ep[4], ps3_read_ep[5], ps3_read_ep[6]);
+	
+	if (ps3_read_ep[0] == 0x42 && ps3_read_ep[1] == 0x0c)	// 需要先發一個數據給PS3主機, 才會有這個指令
+	{
+		PS3_host_flag = 1;	// PS3平臺特徵
+		PS3_sendDATA_flag = 1;
+	}
+	if (ps3_read_ep[0] == 0x42 && ps3_read_ep[1] == 0x0b)
+	{
+
+	}
 	unsigned char temp = ps3_read_ep[9] << 4;
 	u8 four = (ps3_read_ep[9] >> 4);	// 獲取高4位, 为1, 则係4号
 	u8 ID_Num = (temp >> 4);	// 獲取低4位
@@ -603,16 +616,19 @@ static u32 ps3_recv_output_report(struct usb_device_t* usb_device, struct usb_ct
 		break;
 	}
 	ps3_player_ID = ID_Num;
-	gpio_direction_output(IO_PORTA_03, 0);
 	return  USB_EP0_STAGE_SETUP;
 }
 static u32 ps3_interface_hander(struct usb_device_t* usb_device, struct usb_ctrlrequest* setup)
 {
 	u8 mute;
+#if DEBUG_PRINT
 	extern unsigned char timer_send_flag;	// from my_put_test.c
-	//timer_send_flag = 1;	// 停止手柄线程的定时器发送任务队列
-	//log_debug("---------- %s ----------", __func__);
-	//timer_send_flag = 0;
+	timer_send_flag = 1;	// 停止手柄线程的定时器发送任务队列
+	log_debug("---------- %s ----------", __func__);
+	timer_send_flag = 0;
+#endif // DEBUG_PRINT
+
+	
 	const usb_dev usb_id = usb_device2id(usb_device);
 	u32 tx_len;
 	u8* tx_payload = usb_get_setup_buffer(usb_device);
@@ -686,16 +702,18 @@ static u32 ps3_interface_hander(struct usb_device_t* usb_device, struct usb_ctrl
 		}
 	}break;
 	case USB_REQ_SET_REPORT: {
-		PS3_host_flag = 1;	// PS3平臺特徵
 		usb_set_setup_recv(usb_device, ps3_recv_output_report);
-		/*log_debug("---------- REQUEST SET REPORT ----------\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x,\
+#if DEBUG_PRINT
+		log_debug("---------- REQUEST SET REPORT ----------\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x,\
  %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x,\n %x %x, %x %x, %x %x, %x %x, %x %x", ps3_read_ep[0], ps3_read_ep[1],
 			ps3_read_ep[2], ps3_read_ep[3], ps3_read_ep[4], ps3_read_ep[5], ps3_read_ep[6], ps3_read_ep[7], ps3_read_ep[8], ps3_read_ep[9],
 			ps3_read_ep[10], ps3_read_ep[11], ps3_read_ep[12], ps3_read_ep[13], ps3_read_ep[14], ps3_read_ep[15], ps3_read_ep[16], ps3_read_ep[17],
 			ps3_read_ep[18], ps3_read_ep[19], ps3_read_ep[20], ps3_read_ep[21], ps3_read_ep[22], ps3_read_ep[23], ps3_read_ep[24], ps3_read_ep[25],
 			ps3_read_ep[26], ps3_read_ep[27], ps3_read_ep[28], ps3_read_ep[29], ps3_read_ep[30], ps3_read_ep[31], ps3_read_ep[32], ps3_read_ep[33],
 			ps3_read_ep[34], ps3_read_ep[35], ps3_read_ep[36], ps3_read_ep[37], ps3_read_ep[38], ps3_read_ep[39], ps3_read_ep[40], ps3_read_ep[41],
-			ps3_read_ep[42], ps3_read_ep[43], ps3_read_ep[44], ps3_read_ep[45], ps3_read_ep[46], ps3_read_ep[47], ps3_read_ep[48], ps3_read_ep[49]);*/
+			ps3_read_ep[42], ps3_read_ep[43], ps3_read_ep[44], ps3_read_ep[45], ps3_read_ep[46], ps3_read_ep[47], ps3_read_ep[48], ps3_read_ep[49]);
+#endif // DEBUG_PRINT
+
 	}break;
 	default:
 		ret = 1;
@@ -709,8 +727,10 @@ u32 hid_my_ps3_0(const usb_dev usb_id, u8* ptr, u32* cur_itf_num)
 	u8* tptr = ptr;
 	u32 offset;
 	u32 frame_len;
+#if DEBUG_PRINT
 	log_debug("---------- %s ----------", __func__);
 	log_debug("my device:%d\n", *cur_itf_num);
+#endif // DEBUG_PRINT
 
 	memcpy(tptr, (u8*)ps3_configuration_descriptor, sizeof(ps3_configuration_descriptor));
 	if (usb_set_interface_hander(usb_id, *cur_itf_num, ps3_interface_hander) != *cur_itf_num) {/*进入ASSERT宏, cpu_reset或者打印debug*/
