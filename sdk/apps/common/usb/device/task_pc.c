@@ -181,29 +181,7 @@ static void usb_cdc_wakeup(struct usb_device_t *usb_device)
 
 static int usb_timer_ID;
 u8 usb_connect_timeout_flag = 2;    // 描述符選擇, 默認PS3平臺
-u8 usb_reset_count = 0;
-extern void usbstack_init();
-extern void usbstack_exit();
-static void* USB_connect_timeout_task(void* p_arg)
-{
-    int ret;
-    if (usb_reset_count > 4)
-    {
-        usb_reset_count = 0;
-        /*我都唔知道此處是否有用*/
-        gpio_direction_output(IO_PORT_DP, 0);
-        gpio_direction_output(IO_PORT_DM, 0);
-        delay(10000);
-        /************************/
-        log_debug(" RUN USB release ! ! !");
-        usb_connect_timeout_flag = 1;   // 切換平臺所用的描述符
-        printf("file:%s, line:%d", __FILE__, __LINE__);
-        usbstack_init();
-        usb_start();
-    }
-    
-    return &ret;
-}
+
 
 void usb_start()
 {
@@ -215,7 +193,6 @@ void usb_start()
 #ifdef USB_DEVICE_CLASS_CONFIG
     g_printf("USB_DEVICE_CLASS_CONFIG:%x", USB_DEVICE_CLASS_CONFIG);
     usb_device_mode(usbfd, USB_DEVICE_CLASS_CONFIG);
-    usb_timer_ID = usr_timeout_add(NULL, USB_connect_timeout_task, 800, 1); // USB復位命令很快, 最好不要超過1s, 否則會阻塞不能被主機識別
 #endif
 
 
