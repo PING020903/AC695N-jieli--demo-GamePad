@@ -2341,7 +2341,7 @@ void my_task_init(void)
 #endif
 
 #if SPECIAL_FUNC_TIMER
-    ret_id_timer_SpecialFunctions = sys_hi_timer_add(NULL, SpecialFunc_timer_task, SPECIAL_FUNC_TCC);   // 最好唔好少於450ms
+    ret_id_timer_SpecialFunctions = sys_hi_timer_add(NULL, SpecialFunc_timer_task, SPECIAL_FUNC_TCC);   // 最好唔好少於500ms, 低于该值判断会不稳定, MCU容易触发RESET, 400ms以下无法判断
     log_print(__LOG_INFO, NULL, "Special_Functions timer task ID : %d\n", ret_id_timer_SpecialFunctions);
 #endif
 #endif
