@@ -90,6 +90,8 @@ static unsigned char count_all_func[10]; // function start to end time
 #define DEADBAND_X2         (575)       // internal deadband, plus side of the axis
 #define PS3_DEADBAND_X1     (460)
 #define PS3_DEADBAND_X2     (600)
+#define PS3_OUTSIDE_DEADBAND    (724)
+#define PS3_HALF_AXLE       (PS3_OUTSIDE_DEADBAND / 2)
 #define PS3_OUTSIDE_DEADBAND_X1 (50)
 #define PS3_OUTSIDE_DEADBAND_X2 (1000)
 #define TRIGGER_INIT_VAL    (30)        // trigger initial value
@@ -143,13 +145,13 @@ static volatile unsigned char ps_key = 0;
 #endif
 
 #if LEFT_ROCKER
-static volatile int my_rocker_ad_key_x = 0; // ADC1, IO_PORTA_05
-static volatile int my_rocker_ad_key_y = 0; // ADC2, IO_PORTA_06
+static volatile int my_rocker_ad_key_x = 0; // ADC1, IO_PORTA_05 /* 物理上 X- ~ X+ 對應樓主所用的搖桿輸入值 0 ~ 1023 */
+static volatile int my_rocker_ad_key_y = 0; // ADC2, IO_PORTA_06 /* 物理上 Y- ~ Y+ 對應樓主所用的搖桿輸入值 0 ~ 1023 */
 #endif
 
 #if RIGHT_ROCKER
-static volatile int R_rocker_ad_key_x = 0; // ADC5, IO_PORTB_01
-static volatile int R_rocker_ad_key_y = 0; // ADC6, IO_PORTB_03
+static volatile int R_rocker_ad_key_x = 0;  // ADC5, IO_PORTB_01 /* 物理上 X- ~ X+ 對應樓主所用的搖桿輸入值 0 ~ 1023 */
+static volatile int R_rocker_ad_key_y = 0;  // ADC6, IO_PORTB_03 /* 物理上 Y- ~ Y+ 對應樓主所用的搖桿輸入值 0 ~ 1023 */
 #endif
 
 #if TRIGGER
@@ -845,6 +847,11 @@ void left_read_rocker(void)
     unsigned char L_X_minus = 0; // X-
     unsigned char L_Y_plus = 0;  // Y+
     unsigned char L_Y_minus = 0; // Y-
+//          ↑Y+
+//          |
+//   X- 一一一一一→ X+
+//          |
+//          |Y-
 
 #if LEFT_ROCKER
 
@@ -918,7 +925,7 @@ void left_read_rocker(void)
         data_send_to_host[6] = 0x00; // left rocker X
         data_send_to_host[7] = 0x00;
         data_send_to_host[8] = 0x00; // left rocker Y
-        data_send_to_host[9] = 0Xff;
+        data_send_to_host[9] = 0X00;
     }
 
 #if LEFT_ROCKER_Y_AXIS /* Y axis */
@@ -974,7 +981,11 @@ void right_read_rocker(void)
     unsigned char R_X_minus = 0; // X-
     unsigned char R_Y_plus = 0;  // Y+
     unsigned char R_Y_minus = 0; // Y-
-
+//          ↑Y+
+//          |
+//   X- 一一一一一→ X+
+//          |
+//          |Y-
 #if RIGHT_ROCKER
     R_rocker_ad_key_x = adc_get_value(5); // ADC5
     R_rocker_ad_key_y = adc_get_value(6); // ADC6
@@ -1045,7 +1056,7 @@ void right_read_rocker(void)
         data_send_to_host[10] = 0x00; // right rocker X
         data_send_to_host[11] = 0x00;
         data_send_to_host[12] = 0x00; // right rocker Y
-        data_send_to_host[13] = 0Xff;
+        data_send_to_host[13] = 0X00;
     }
 
 #if RIGHT_ROCKER_Y_AXIS /* Y axis */
@@ -1452,6 +1463,7 @@ void records_movement(void)
 }
 /*****************************************************************************************************/
 
+#define NEW_CODE 1    // 由於尚未更改就離職了, 該部分代碼尚未試驗
 /***************************************** PS3 function *****************************************/
 void ps3_read_key(void)
 {
@@ -1590,72 +1602,161 @@ void ps3_left_read_rocker(void)
     unsigned char L_X_minus = 0; // X-
     unsigned char L_Y_plus = 0;  // Y+
     unsigned char L_Y_minus = 0; // Y-
-
+//          |Y-
+//          |₀
+//   X- 一一一一一→ X+
+//          |
+//          ↓Y+
+// PS3的Y軸要反轉
+//
+//    724.077
+//  |一一一一一|
+//  |         |
+//  |         | 724.077
+//  |         |
+//  |一一一一一|
 #if LEFT_ROCKER
 
     /* parametric is adc CHANNEL */
     my_rocker_ad_key_x = adc_get_value(1); // ADC1
     my_rocker_ad_key_y = adc_get_value(2); // ADC2
+#if NEW_CODE
+    float constant_factor_plus = ( float ) ((PS3_DEADBAND_X2 + PS3_HALF_AXLE) - PS3_DEADBAND_X2) / ( float ) 0x80;
+    float constant_factor_minus = ( float ) (PS3_DEADBAND_X1 - (PS3_DEADBAND_X1 - (PS3_DEADBAND_X1 - PS3_HALF_AXLE))) / ( float ) 0x80;
+#endif // NEW_CODE
 
+#if NEW_CODE
 
-    if ((PS3_DEADBAND_X2 <= my_rocker_ad_key_x) || (PS3_DEADBAND_X1 >= my_rocker_ad_key_x))
+    // X- ~ X₀ = PS3_DEADBAND_X1 ~ (PS3_DEADBAND_X1 - (724.077 / 2) )
+    // X+ ~ X₀ = PS3_DEADBAND_X2 ~ (PS3_DEADBAND_X2 + (724.077 / 2) )
+    if ( (PS3_DEADBAND_X2 <= my_rocker_ad_key_x) || (PS3_DEADBAND_X1 >= my_rocker_ad_key_x) )// 界定中心死區
     {
 #if LEFT_ROCKER_BUFFER /* left rocker value buffer */
-        if (PS3_DEADBAND_X2 <= my_rocker_ad_key_x)  // 0x7f~0xff, X+
+        if ( (PS3_DEADBAND_X2 <= my_rocker_ad_key_x) && ((PS3_DEADBAND_X2 + PS3_HALF_AXLE) > my_rocker_ad_key_x) )// 界定外死區, X+ ~ X₀
         {
-            float temp_X_plus_f = my_rocker_ad_key_x / 4.0;     //1023/4=255.75
-            L_X_plus = (unsigned char)temp_X_plus_f;
+            float temp_X_plus_f = my_rocker_ad_key_x / constant_factor_plus;
+            L_X_plus = ( unsigned char ) temp_X_plus_f;
             L_X_minus = 0;
 #if LEFT_ROCKER_X_AXIS /* X axis */
-            ps3_data_send_to_host[6] = L_X_plus;
+            ps3_data_send_to_host[ 6 ] = L_X_plus;
 #endif
         }
-        if (PS3_DEADBAND_X1 >= my_rocker_ad_key_x)  // 0x7f~0x00, X-
+
+        if ( (PS3_DEADBAND_X1 >= my_rocker_ad_key_x) && ((PS3_DEADBAND_X1 - PS3_HALF_AXLE) < my_rocker_ad_key_x) )// 界定外死區, X- ~ X₀
         {
-            float temp_X_minus_f = my_rocker_ad_key_x / 3.59;    // 460/3.59=128.133...
-            L_X_minus = (unsigned char)temp_X_minus_f;
+            float temp_X_minus_f = my_rocker_ad_key_x / constant_factor_minus;
+            L_X_minus = ( unsigned char ) temp_X_minus_f;
             L_X_plus = 0;
 #if LEFT_ROCKER_X_AXIS /* X axis */
-            ps3_data_send_to_host[6] = L_X_minus;
+            ps3_data_send_to_host[ 6 ] = L_X_minus;
 #endif
         }
 #endif
     }
     else
     {
-        ps3_data_send_to_host[6] = 0x7f;
+        ps3_data_send_to_host[ 6 ] = 0x7f;
     }
+#endif // 由於尚未更改就離職了, 該部分代碼尚未試驗
 
+#if 0
+    if ( (PS3_DEADBAND_X2 <= my_rocker_ad_key_x) || (PS3_DEADBAND_X1 >= my_rocker_ad_key_x) )
+    {
 
-    if ((PS3_DEADBAND_X2 <= my_rocker_ad_key_y) || (PS3_DEADBAND_X1 >= my_rocker_ad_key_y)) // PS3的Y轴输入与AD值反转
+        if ( PS3_DEADBAND_X2 <= my_rocker_ad_key_x )  // 0x7f~0xff, X+
+        {
+            float temp_X_plus_f = my_rocker_ad_key_x / 4.0;     //1023/4=255.75
+            L_X_plus = ( unsigned char ) temp_X_plus_f;
+            L_X_minus = 0;
+
+            ps3_data_send_to_host[ 6 ] = L_X_plus;
+
+        }
+        if ( PS3_DEADBAND_X1 >= my_rocker_ad_key_x )  // 0x7f~0x00, X-
+        {
+            float temp_X_minus_f = my_rocker_ad_key_x / 3.59;    // 460/3.59=128.133...
+            L_X_minus = ( unsigned char ) temp_X_minus_f;
+            L_X_plus = 0;
+
+            ps3_data_send_to_host[ 6 ] = L_X_minus;
+
+        }
+
+    }
+    else
+    {
+        ps3_data_send_to_host[ 6 ] = 0x7f;
+    }
+#endif // 初始版本的搖桿X處理
+
+    
+
+    // Y- ~ Y₀ = PS3_DEADBAND_X1 ~ (PS3_DEADBAND_X1 - (724.077 / 2) )
+    // Y+ ~ Y₀ = PS3_DEADBAND_X2 ~ (PS3_DEADBAND_X2 + (724.077 / 2) )
+    // PS3的Y轴输入与AD值反转
+#if NEW_CODE
+    if ( (PS3_DEADBAND_X2 <= my_rocker_ad_key_y) || (PS3_DEADBAND_X1 >= my_rocker_ad_key_y) )
     {
 #if LEFT_ROCKER_BUFFER /* left rocker value buffer */
-        if (PS3_DEADBAND_X2 <= my_rocker_ad_key_y)  // Y-
+        if ( (PS3_DEADBAND_X2 <= my_rocker_ad_key_y) && ((PS3_DEADBAND_X2 + PS3_HALF_AXLE) > my_rocker_ad_key_y) )// 界定外死區, Y- ~ Y₀
         {
-            float temp_Y_plus_f = my_rocker_ad_key_y / 4.0;
-            L_Y_plus = (unsigned char)temp_Y_plus_f;
+            float temp_Y_plus_f = my_rocker_ad_key_y / constant_factor_plus;
+            L_Y_plus = ( unsigned char ) temp_Y_plus_f;
             L_Y_minus = 0;
 #if LEFT_ROCKER_Y_AXIS /* Y axis */
-            ps3_data_send_to_host[7] = 0xff - L_Y_plus;
+            ps3_data_send_to_host[ 7 ] = 0xff - L_Y_plus;
 #endif
         }
-        if (PS3_DEADBAND_X1 >= my_rocker_ad_key_y)  // Y+
+        if ( (PS3_DEADBAND_X1 >= my_rocker_ad_key_y) && ((PS3_DEADBAND_X1 - PS3_HALF_AXLE) < my_rocker_ad_key_y) )// 界定外死區, Y+ ~ Y₀
         {
-            float temp_Y_minus_f = my_rocker_ad_key_y / 3.59;
-            L_Y_minus = (unsigned char)temp_Y_minus_f;
+            float temp_Y_minus_f = my_rocker_ad_key_y / constant_factor_minus;
+            L_Y_minus = ( unsigned char ) temp_Y_minus_f;
             L_Y_plus = 0;
 #if LEFT_ROCKER_Y_AXIS /* Y axis */
-            ps3_data_send_to_host[7] = 0x7f + (0x80 - L_Y_minus);
+            ps3_data_send_to_host[ 7 ] = 0x7f + (0x80 - L_Y_minus);
 #endif
         }
 #endif /* left rocker value buffer */
     }
     else
     {
-        ps3_data_send_to_host[7] = 0x7f;
+        ps3_data_send_to_host[ 7 ] = 0x7f;
+    }
+#endif // 由於尚未更改就離職了, 該部分代碼尚未試驗
+
+#if 0
+    if ( (PS3_DEADBAND_X2 <= my_rocker_ad_key_y) || (PS3_DEADBAND_X1 >= my_rocker_ad_key_y) )// 界定中心死區
+    {
+#if LEFT_ROCKER_BUFFER /* left rocker value buffer */
+        if ( PS3_DEADBAND_X2 <= my_rocker_ad_key_y )  // Y-
+        {
+            float temp_Y_plus_f = my_rocker_ad_key_y / 4.0;
+            L_Y_plus = ( unsigned char ) temp_Y_plus_f;
+            L_Y_minus = 0;
+#if LEFT_ROCKER_Y_AXIS /* Y axis */
+            ps3_data_send_to_host[ 7 ] = 0xff - L_Y_plus;
+#endif
+        }
+        if ( PS3_DEADBAND_X1 >= my_rocker_ad_key_y )  // Y+
+        {
+            float temp_Y_minus_f = my_rocker_ad_key_y / 3.59;
+            L_Y_minus = ( unsigned char ) temp_Y_minus_f;
+            L_Y_plus = 0;
+#if LEFT_ROCKER_Y_AXIS /* Y axis */
+            ps3_data_send_to_host[ 7 ] = 0x7f + (0x80 - L_Y_minus);
+#endif
+        }
+#endif /* left rocker value buffer */
+    }
+    else
+    {
+        ps3_data_send_to_host[ 7 ] = 0x7f;
     }
 
 #endif
+#endif // 初始版本的搖桿Y處理
+
+   
 #if LEFT_ROCKER_PRINT
     if ((tcc_count % (500 / MAIN_TCC_TIMER)) == 0)
     {
@@ -1671,84 +1772,167 @@ void ps3_right_read_rocker(void)
     unsigned char R_X_minus = 0; // X-
     unsigned char R_Y_plus = 0;  // Y+
     unsigned char R_Y_minus = 0; // Y-
-
+//          |Y-
+//          |₀
+//   X- 一一一一一→ X+
+//          |
+//          ↓Y+
+// PS3的Y軸要反轉
+//
+//    724.077
+//  |一一一一一|
+//  |         |
+//  |         | 724.077
+//  |         |
+//  |一一一一一|
 #if RIGHT_ROCKER
 
     /* parametric is adc CHANNEL */
     R_rocker_ad_key_x = adc_get_value(5); // ADC5
     R_rocker_ad_key_y = adc_get_value(6); // ADC6
+#if NEW_CODE
+    float constant_factor_plus = ( float ) ((PS3_DEADBAND_X2 + PS3_HALF_AXLE) - PS3_DEADBAND_X2) / ( float ) 0x80;
+    float constant_factor_minus = ( float ) (PS3_DEADBAND_X1 - (PS3_DEADBAND_X1 - (PS3_DEADBAND_X1 - PS3_HALF_AXLE))) / ( float ) 0x80;
+#endif // NEW_CODE
+#if NEW_CODE
 
-
-    if ((PS3_OUTSIDE_DEADBAND_X2 >=  R_rocker_ad_key_x) && (PS3_DEADBAND_X2 <= R_rocker_ad_key_x)
-        || (PS3_DEADBAND_X1 >= R_rocker_ad_key_x) && (PS3_OUTSIDE_DEADBAND_X1 <= R_rocker_ad_key_x))
+    // X- ~ X₀ = PS3_DEADBAND_X1 ~ (PS3_DEADBAND_X1 - (724.077 / 2) )
+    // X+ ~ X₀ = PS3_DEADBAND_X2 ~ (PS3_DEADBAND_X2 + (724.077 / 2) )
+    if ( (PS3_DEADBAND_X2 <= R_rocker_ad_key_x) || (PS3_DEADBAND_X1 >= R_rocker_ad_key_x) )// 界定中心死區
     {
 #if RIGHT_ROCKER_BUFFER /* left rocker value buffer */
-        if (PS3_DEADBAND_X2 <= R_rocker_ad_key_x)  // 0x7f~0xff, X+
+        if ( (PS3_DEADBAND_X2 <= R_rocker_ad_key_x || (PS3_DEADBAND_X2 + PS3_HALF_AXLE) > R_rocker_ad_key_x) )//界定外死區, X+ ~ X₀
         {
-            float temp_X_plus_f = R_rocker_ad_key_x / 3.8;     //1023/3.8=269.210...
-            R_X_plus = (unsigned char)temp_X_plus_f;
+#if RIGHT_ROCKER_X_AXIS /* X axis */
+            float temp_X_plus_f = R_rocker_ad_key_x / constant_factor_plus;
+            R_X_plus = ( unsigned char ) temp_X_plus_f;
             R_X_minus = 0;
-#if RIGHT_ROCKER_X_AXIS /* X axis */
-            if (R_X_plus >= 222)   // 溢出跳轉, 否則會在這個值定住然後又不會翻滾( 在游戲 god of war )
-                goto X_plusOverflow;    // 該辦法是非綫性的, 只是唔太想全部重新映射了, 費時
-            ps3_data_send_to_host[8] = R_X_plus;
+            ps3_data_send_to_host[ 8 ] = L_X_plus;
 #endif
         }
-        if (PS3_DEADBAND_X1 >= R_rocker_ad_key_x)  // 0x7f~0x00, X-
+
+        if ( (PS3_DEADBAND_X1 >= R_rocker_ad_key_x) || (PS3_DEADBAND_X1 - PS3_HALF_AXLE) < R_rocker_ad_key_x ) )//界定外死區, X- ~ X₀
         {
-            float temp_X_minus_f = (R_rocker_ad_key_x - (R_rocker_ad_key_x / 7.0)) / 3.3;    // (460-460/10)/3.3=139.3939...
-            R_X_minus = (unsigned char)temp_X_minus_f;
-            R_X_plus = 0;
 #if RIGHT_ROCKER_X_AXIS /* X axis */
-            if (R_X_minus <= 60)    // 該辦法是非綫性的, 只是唔太想全部重新映射了, 費時
-                goto XminusOverflow;
-            ps3_data_send_to_host[8] = R_X_minus;   // 斜摇杆无法达到边界
+            float temp_X_minus_f = R_rocker_ad_key_x / constant_factor_minus;
+            R_X_minus = ( unsigned char ) temp_X_minus_f;
+            R_X_plus = 0;
+            ps3_data_send_to_host[ 8 ] = R_X_minus;
 #endif
         }
 #endif
-    }
-    else if(R_rocker_ad_key_x > PS3_OUTSIDE_DEADBAND_X2)
-    {
-        X_plusOverflow:
-        ps3_data_send_to_host[8] = 0xff;
-    }
-    else if (PS3_OUTSIDE_DEADBAND_X1 > R_rocker_ad_key_x)
-    {
-        XminusOverflow:
-        ps3_data_send_to_host[8] = 0x00;
     }
     else
     {
-        ps3_data_send_to_host[8] = 0x7f;
+        ps3_data_send_to_host[ 8 ] = 0x7f;
     }
-
-
-
-    if ((PS3_DEADBAND_X2 <= R_rocker_ad_key_y) || (PS3_DEADBAND_X1 >= R_rocker_ad_key_y)) // PS3的Y轴输入与AD值反转
+#endif // 由於尚未更改就離職了, 該部分代碼尚未試驗
+   
+#if 0
+    if ( (PS3_OUTSIDE_DEADBAND_X2 >= R_rocker_ad_key_x) && (PS3_DEADBAND_X2 <= R_rocker_ad_key_x)
+        || (PS3_DEADBAND_X1 >= R_rocker_ad_key_x) && (PS3_OUTSIDE_DEADBAND_X1 <= R_rocker_ad_key_x))
     {
 #if RIGHT_ROCKER_BUFFER /* left rocker value buffer */
-        if (PS3_DEADBAND_X2 <= R_rocker_ad_key_y)  // Y-
+        if ( PS3_DEADBAND_X2 <= R_rocker_ad_key_x )  // 0x7f~0xff, X+
         {
-            float temp_Y_plus_f = R_rocker_ad_key_y / 4.0;
-            R_Y_plus = (unsigned char)temp_Y_plus_f;
-            R_Y_minus = 0;
-#if RIGHT_ROCKER_Y_AXIS /* Y axis */
-            ps3_data_send_to_host[9] = 0xff - R_Y_plus;
+            float temp_X_plus_f = R_rocker_ad_key_x / 3.8;     //1023/3.8=269.210...
+            R_X_plus = ( unsigned char ) temp_X_plus_f;
+            R_X_minus = 0;
+#if RIGHT_ROCKER_X_AXIS /* X axis */
+            if ( R_X_plus >= 222 )   // 溢出跳轉, 否則會在這個值定住然後又不會翻滾( 在游戲 god of war )
+                goto X_plusOverflow;    // 該辦法是非綫性的, 只是唔太想全部重新映射了, 費時
+            ps3_data_send_to_host[ 8 ] = R_X_plus;
 #endif
         }
-        if (PS3_DEADBAND_X1 >= R_rocker_ad_key_y)  // Y+
+        if ( PS3_DEADBAND_X1 >= R_rocker_ad_key_x )  // 0x7f~0x00, X-
+        {
+            float temp_X_minus_f = (R_rocker_ad_key_x - (R_rocker_ad_key_x / 7.0)) / 3.3;    // (460-460/10)/3.3=139.3939...
+            R_X_minus = ( unsigned char ) temp_X_minus_f;
+            R_X_plus = 0;
+#if RIGHT_ROCKER_X_AXIS /* X axis */
+            if ( R_X_minus <= 60 )    // 該辦法是非綫性的, 只是唔太想全部重新映射了, 費時
+                goto XminusOverflow;
+            ps3_data_send_to_host[ 8 ] = R_X_minus;   // 斜摇杆无法达到边界
+#endif
+        }
+#endif
+    }
+    else if ( R_rocker_ad_key_x > PS3_OUTSIDE_DEADBAND_X2 )
+    {
+    X_plusOverflow:
+        ps3_data_send_to_host[ 8 ] = 0xff;
+    }
+    else if ( PS3_OUTSIDE_DEADBAND_X1 > R_rocker_ad_key_x )
+    {
+    XminusOverflow:
+        ps3_data_send_to_host[ 8 ] = 0x00;
+    }
+    else
+    {
+        ps3_data_send_to_host[ 8 ] = 0x7f;
+    }
+#endif // 初始版本的搖桿處理, 爲了達到邊界, 使用了非綫性的處理
+
+    
+
+
+    // Y- ~ Y₀ = PS3_DEADBAND_X1 ~ (PS3_DEADBAND_X1 - (724.077 / 2) )
+    // Y+ ~ Y₀ = PS3_DEADBAND_X2 ~ (PS3_DEADBAND_X2 + (724.077 / 2) )
+#if NEW_CODE
+    if ( (PS3_DEADBAND_X2 <= R_rocker_ad_key_y) || (PS3_DEADBAND_X1 >= R_rocker_ad_key_y) )
+    {
+#if LEFT_ROCKER_BUFFER /* left rocker value buffer */
+        if ( (PS3_DEADBAND_X2 <= R_rocker_ad_key_y) && ((PS3_DEADBAND_X2 + PS3_HALF_AXLE) > R_rocker_ad_key_y) )// 界定外死區, Y- ~ Y₀
+        {
+            float temp_Y_plus_f = my_rocker_ad_key_y / constant_factor_plus;
+            R_Y_plus = ( unsigned char ) temp_Y_plus_f;
+            R_Y_minus = 0;
+#if LEFT_ROCKER_Y_AXIS /* Y axis */
+            ps3_data_send_to_host[ 9 ] = 0xff - R_Y_plus;
+#endif
+        }
+        if ( (PS3_DEADBAND_X1 >= R_rocker_ad_key_y) && ((PS3_DEADBAND_X1 - PS3_HALF_AXLE) < R_rocker_ad_key_y) )// 界定外死區, Y+ ~ Y₀
+        {
+            float temp_Y_minus_f = R_rocker_ad_key_y / constant_factor_minus;
+            R_Y_minus = ( unsigned char ) temp_Y_minus_f;
+            R_Y_plus = 0;
+#if LEFT_ROCKER_Y_AXIS /* Y axis */
+            ps3_data_send_to_host[ 9 ] = 0x7f + (0x80 - R_Y_minus);
+#endif
+        }
+#endif /* left rocker value buffer */
+    }
+    else
+    {
+        ps3_data_send_to_host[ 9 ] = 0x7f;
+    }
+#endif // 由於尚未更改就離職了, 該部分代碼尚未試驗
+#if 0
+    if ( (PS3_DEADBAND_X2 <= R_rocker_ad_key_y) || (PS3_DEADBAND_X1 >= R_rocker_ad_key_y) ) // PS3的Y轴输入与AD值反转
+    {
+#if RIGHT_ROCKER_BUFFER /* left rocker value buffer */
+        if ( PS3_DEADBAND_X2 <= R_rocker_ad_key_y )  // Y-
+        {
+            float temp_Y_plus_f = R_rocker_ad_key_y / 4.0;
+            R_Y_plus = ( unsigned char ) temp_Y_plus_f;
+            R_Y_minus = 0;
+#if RIGHT_ROCKER_Y_AXIS /* Y axis */
+            ps3_data_send_to_host[ 9 ] = 0xff - R_Y_plus;
+#endif
+        }
+        if ( PS3_DEADBAND_X1 >= R_rocker_ad_key_y )  // Y+
         {
             float temp_Y_minus_f = R_rocker_ad_key_y / 3.59;
-            R_Y_minus = (unsigned char)temp_Y_minus_f;
+            R_Y_minus = ( unsigned char ) temp_Y_minus_f;
             R_Y_plus = 0;
 #if RIGHT_ROCKER_Y_AXIS /* Y axis */
-            if ((0x7f + (0x80 - R_Y_minus)) > 230) // 解決不能到達邊界的問題, 預先計算的值跟實際的值出現了偏差
+            if ( (0x7f + (0x80 - R_Y_minus)) > 230 ) // 解決不能到達邊界的問題, 預先計算的值跟實際的值出現了偏差
             {   // 該辦法是非綫性的, 只是唔太想全部重新映射了, 費時
-                ps3_data_send_to_host[9] =0xff;
+                ps3_data_send_to_host[ 9 ] = 0xff;
             }
             else
             {
-                ps3_data_send_to_host[9] = 0x7f + (0x80 - R_Y_minus);
+                ps3_data_send_to_host[ 9 ] = 0x7f + (0x80 - R_Y_minus);
             }
 
 #endif
@@ -1757,8 +1941,11 @@ void ps3_right_read_rocker(void)
     }
     else
     {
-        ps3_data_send_to_host[9] = 0x7f;
+        ps3_data_send_to_host[ 9 ] = 0x7f;
     }
+#endif // 0
+
+
 
 #endif
 #if RIGHT_ROCKER_PRINT
