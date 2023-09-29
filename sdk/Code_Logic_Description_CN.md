@@ -60,6 +60,8 @@
 > 
 > sdk\apps\common\usb\device\uac1.c
 > 
+> sdk\apps\common\usb\device\hid.c
+> 
 > 对于USB交互实现，当前所列举的这几个文件均有改动，具体实现实际上依赖整个 sdk\apps\common\usb\device 目录，建议该目录下的文件都看
 
 
@@ -198,7 +200,7 @@ OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修�
 
 #### void left_read_rocker(void)
 读取左摇杆的ADC值，与读取扳机的ADC值类似，也要取轴中间值重新做轴映射，与之不同的是摇杆的ADC值初始值就在中间，需要给中间做死区。
-实际有效读取区域如下图蓝色区域，中间黑色是非读取区域，极限边缘：
+实际有效读取区域如下图蓝色区域，中间黑色是非读取区域，极限边缘就是该圆边：
 ![image](https://github.com/PING020903/AC695N-demo-xbox360-WindowsPC_only/assets/88314322/ee93a0f9-1006-40c8-bdd1-fe1dd8d16458)
 
 #### void right_read_rocker(void)
@@ -267,6 +269,7 @@ static unsigned int *records_keys_point = &records_keys;     // 第一次:  *((u
 
 #### void ps3_left_read_rocker(void)
 读取左摇杆XY轴的AD值，PS3对应该值的处理不能像Xbox360手柄那样，否则在游戏中会有手柄在物理上达到边界，但在游戏中的表现并非达到边界的表现，具体见该项目首页的readme.md，楼主详细阐述了缘由
+
 ![image](https://github.com/PING020903/AC695N-demo-GamePad/assets/88314322/ccf2a8eb-94f8-41a6-9ed9-02a1b75613d5)
 
 #### void ps3_right_read_rocker(void)
