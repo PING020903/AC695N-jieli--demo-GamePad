@@ -1,10 +1,10 @@
 # 关于该项目的说明
 
-该项目是一个仿照Xbox360手柄做的，对于支持的设备却是不支持Xbox360主机，仅支持PC。
+该项目是一个仿照Xbox360手柄做的，插入PC会显示该手柄为Xbox360手柄，暂未对Xbox360主机做适配，支持PS3
 
-使用的MCU为杰理科技的AC6951C，用的是杰理官方的DEMO project，在RTOS中运行
+使用的MCU为杰理科技的AC6951C，该SDK是杰理官方的DEMO project ( version: soundbox )，带了RTOS非裸机
 
-使用USB2.0与主机PC进行通讯
+使用USB2.0与主机PC进行通讯，暂未启用Bluetooth功能，也未有市面上手柄音频输出的功能
 
 #### 杰理文档链接
 
@@ -68,7 +68,7 @@
 
 ### 大体逻辑
 
-如下图，其中思想参考*状态机*，具体参考demo project中的*程序范例*
+如下图，具体参考demo project中的*程序范例*
 
 ![_1657862246_1693050692149_1693050692000_wifi_0](https://github.com/PING020903/AC695N-demo-xbox360-WindowsPC_only/assets/88314322/efbbaab8-897a-46be-906f-eb54580993d5)
 
@@ -99,18 +99,24 @@
 #define RIGHT_ROCKER_Y_AXIS 1   // 右摇杆Y轴
 
 #define SUCCESSIVE_PRESS    1   // 连点功能
+#define VM_TEST             1   // VM 区域读写
+#define CHECK_MEMORY        0   // 打印实时内存信息
 
 #define FUNC_TIMESTAMP      0   // 粗略测量函数执行时间
 
 #define THREAD_CREATE       1   // 线程创建
 #define MAIN_TIMER          1   // 主要定时器
 #define PWM_TIEMR           1   // PWM定时器
-#define SPECIAL_FUNC_TIMER  0   // 特殊功能定时器
+#define SPECIAL_FUNC_TIMER  1   // 特殊功能定时器
 #define MY_PRINTF           0   // 我的打印
+#define PWM_INIT            1   // PWM初始化
 
 #define RECORD_MOVEMENT     1   // 功能: 记录一定时间内的键值
 #define MY_LIST             0   // 用不了malloc(), 转用planA: 数组, (planB: 链表)我用不了
 #define MY_ARRAY            1   // 记录一定时间内的键值( 数组方式存储 )
+#define RIGHT_ROCKER_PRINT  0
+#define LEFT_ROCKER_PRINT   0
+#define PS3_KEY_PRINT       1
 /***********************************************/
 ```
 
@@ -123,8 +129,10 @@
 以下一一列出了函数实现的返回值类型与参数以及修饰关键字
 
 ```c
-static inline unsigned int xbox360_tx_data(const usb_dev usb_id, const u8 *buffer, unsigned int len);
+static inline unsigned int USB_TX_data(const usb_dev usb_id, const u8 *buffer, unsigned int len);
 static inline unsigned char merge_value(unsigned char all_key, unsigned char key, unsigned int bit);
+
+/***************************************** xbox360(PC) function *****************************************/
 static inline void send_data_to_host(void);
 void my_read_key(void);
 void read_trigger_value(void);
@@ -133,6 +141,16 @@ void right_read_rocker(void);
 void my_led_function(void);
 void connect_flicker(void);
 void records_movement(void);
+
+/***************************************** PS3 function *****************************************/
+void ps3_read_key(void);
+void ps3_read_trigger(void);
+void ps3_left_read_rocker(void);
+void ps3_right_read_rocker(void);
+void ps3_player_led(void);
+void ps3_PWM_shake(void);
+
+
 void *my_task(void *p_arg);
 void my_button_init(void);
 void my_PWM_output_init(void);
@@ -141,121 +159,66 @@ static inline void *led_timer_task(void *p_arg);
 static inline void *SpecialFunc_timer_task(void *p_arg);
 void my_task_init(void);
 ```
-
+---
+## common function   公共函数
 #### void my_task_init(void)
-
 该函数用以将创建该线程与OS定时器以及一些IO的初始化工作，当执行完毕后不再执行。
 
-
-
 #### static inline void *my_timer_task(void *p_arg)
-
 OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修饰只是为了增加一点点执行速度。定时器计时到了就会执行该函数。
-
 这是当前项目中的主要定时器。
 
-
-
 #### static inline void *led_timer_task(void *p_arg)
-
 OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修饰只是为了增加一点点执行速度。定时器计时到了就会执行该函数。
-
 这是当前项目中负责PWM马达震动的定时器，兼职负责上电USB连接后指示灯闪烁。
 
-
-
 #### static inline void *SpecialFunc_timer_task(void *p_arg)
-
 OS定时器的回调函数，可传参，可以不用 *ststic* 与 *inline* 修饰只是为了增加一点点执行速度。定时器计时到了就会执行该函数。
-
-目前该定时器未启用。
-
-
+目前用于重启USB栈切换描述符重新枚举的作用。
 
 #### void my_PWM_output_init(void)
-
 使用杰理MCU的MCPWM功能，跟STM32一样需要对硬件支持PWM输出的IO要初始化 时基、频率、占空比、输出模式。
-
 更多具体需要初始化的成员请看代码。
 
-
-
 #### void my_button_init(void)
-
 按键所使用的普通IO与摇杆所使用的ADC IO的初始化，关于杰里MCU调用IO的封装函数，请看代码。
 
-
-
-#### void my_read_key(void)
-
-读取普通IO输入的函数。
-
-附带了连发功能的实现。
-
-
-
 #### static inline unsigned char merge_value(unsigned char all_key, unsigned char key, unsigned int bit)
-
 将键值key（键值只有0或1两种状态）填入all_key，bit表示要填如all_key的第几位，0~7bit。
 
-
+---
+## Xbox360 support only PC
+#### void my_read_key(void)
+读取普通IO输入的函数。
+附带了连发功能的实现。
 
 #### void read_trigger_value(void)
-
 读取左扳机与右扳机的ADC值，设置两端的死区，取真实轴中间的值重新做轴映射。
-
 ![image](https://github.com/PING020903/AC695N-demo-xbox360-WindowsPC_only/assets/88314322/75350701-c57c-4d2f-a529-f528311a75d4)
 
-
-
-
 #### void left_read_rocker(void)
-
 读取左摇杆的ADC值，与读取扳机的ADC值类似，也要取轴中间值重新做轴映射，与之不同的是摇杆的ADC值初始值就在中间，需要给中间做死区。
-
 实际有效读取区域如下图蓝色区域，中间黑色是非读取区域，极限边缘：
-
 ![image](https://github.com/PING020903/AC695N-demo-xbox360-WindowsPC_only/assets/88314322/ee93a0f9-1006-40c8-bdd1-fe1dd8d16458)
 
-
-
-
 #### void right_read_rocker(void)
-
 读取右摇杆的ADC值，实现原理与读取左摇杆相同。
 
-
-
-#### static inline unsigned int xbox360_tx_data(const usb_dev usb_id, const u8 *buffer, unsigned int len)
-
+#### static inline unsigned int USB_TX_data(const usb_dev usb_id, const u8 *buffer, unsigned int len)
 调用本demo project中的封装的USB发送函数，usb_id 是USB设备的id号，buffer 要发送的字符串，len 要发送的字符串的长度。
 
-
-
 #### static inline void send_data_to_host(void)
-
 检查键值、摇杆、扳机是否有变化，判断主机是否允许从机输入（SOF PND），发送描述从机键值变化的字符串。
-
 ` static unsigned char data_send_to_host_temp[20] = {0x00}; `
 
-
-
 #### void my_led_function(void)
-
 控制PWM输出控制马达转速。
-
 当设备的USB配置的OUT端点接收到震动指令的时候就会执行指令，控制当前PWM输出的占空比。
 
-
-
 #### void connect_flicker(void)
-
 上电后USB连接成功，处理主机发送给设备的数据，使player指示灯闪烁
 
-
-
 #### void records_movement(void)
-
 按键记录宏功能。键值有变化时记录键值，无变化时记录时间。使用数组存储键值与时间。
 
 ```c
@@ -294,8 +257,31 @@ static unsigned int *records_keys_point = &records_keys;     // 第一次:  *((u
 /* Key value Key value    Times record     */
 #endif
 ```
+---
+## support PS3, no support for 3-axis sensors
+#### void ps3_read_key(void)
+读取普通IO输入的函数。读取到按键输入时往数据中代表该按键AD值的位置填入0xff，避免在游戏"god of war"中按键按下界面无响应的问题。
 
-### USB连接部分
+#### void ps3_read_trigger(void)
+读取扳机输入，参考PC_Xbox360部分的扳机输入读取函数。
+
+#### void ps3_left_read_rocker(void)
+读取左摇杆XY轴的AD值，PS3对应该值的处理不能像Xbox360手柄那样，否则在游戏中会有手柄在物理上达到边界，但在游戏中的表现并非达到边界的表现，具体见该项目首页的readme.md，楼主详细阐述了缘由
+![image](https://github.com/PING020903/AC695N-demo-GamePad/assets/88314322/ccf2a8eb-94f8-41a6-9ed9-02a1b75613d5)
+
+#### void ps3_right_read_rocker(void)
+读取右摇杆的XY轴的AD值
+
+#### void ps3_player_led(void)
+该函数用以显示主机给手柄分配的编号。
+关于主机分配的编号解析，在hid.c中处理，通过全局变量传递给该函数。
+
+#### void ps3_PWM_shake(void)
+响应主机给手柄发送的震动强度。
+关于主机给手柄发送的震动强度，在hid.c中接收。
+
+---
+## USB连接部分
 
 我在原本的 *uac1.c* 中添加创建了自己的usb接口处理函数以及 配置描述符、接口描述符、端点描述符，在 *descriptor.c* 中修改了设备描述符。
 
@@ -529,9 +515,14 @@ u32 xbox360_register(const usb_dev usb_id)
 ```
 
 该函数 `u32 xbox360_register(const usb_dev usb_id)`在 *usb_device.c* 中执行，执行后进行描述符配置，这个描述符配置就是以上所描述的 **USB连接部分** 所做的事情。
-
+### 设备描述符的切换
+杰理的这个USB栈，由于看不见具体实现，但是我反复试验，发现重启延时较长，而且只能在枚举成功后重启USB栈才不会导致整个MCU重启，如果我在 "主机获取设备描述符" 阶段重启USB栈，会出现USB栈重启后再次进入 "主机获取设备描述符" 该阶段的第二次上报设备描述符时整个MCU都重启，如此往复。。。楼主也是想了很久试了很久
+故此不同设备的描述符切换的实现，是靠枚举成功后主从机信息交互的特征来判断的，特征正确将不再进行描述符的切换。
+使用了全局变量来表示当前描述符是哪个设备的，定义在`\sdk\apps\common\usb\device\task_pc.c` `u8 usb_connect_timeout_flag;`
+修改于`\sdk\apps\dongle\my_put_test.c`的 SPECIAL_FUNCTIONS 任务，其中係通过主机确认手柄是PS3手柄后发送的一个开启手柄的命令来判断当前描述符是否正确，该变量源于`\sdk\apps\common\usb\device\hid.c` `unsigned char PS3_host_flag;`
 
 
 ### 感谢阅读本文档，写得可能比较简陋，第一次写代码文档，若有遗漏的地方，请多包涵。
 
 
+`
