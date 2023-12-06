@@ -4,6 +4,9 @@
 测试在WindowsPC中有反应、能用，但没做Xbox主机适配
 # 该demo project本人是用code::blocks打开.cbp文件，按齿轮形状的按钮( build )，即便可以进行编译( 前提是你的电脑需要事先安装GUN编译 ) 
 # 切记！！！要记得安装杰理包管理器！！！
+# 
+> sdk/cpu/br23/tools/download.bat
+# 这个下载的批处理文件，在上传GitHub的时候可能会被转换为UNIX( LF )格式的文本，而本项目是在Windows环境下执行的，下载后使用的时候需要转换回Windows( CR LF )格式的文本
    
 # 按下 build 后若你的电脑有连接开发板，且开发板处于烧录模式，即可自动下载到 flash 中    
 若要添加功能，请在app_dongle.c中app_start添加你的任务初始化函数，可参照当前代码中添加任务初始化的形式。   
